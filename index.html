@@ -383,6 +383,37 @@
     .diff-name { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .diff-meta { font-size: 0.7rem; color: #64748b; flex-shrink: 0; }
+
+    .boro-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      margin-bottom: 4px;
+    }
+
+    .boro-table th {
+      text-align: right;
+      color: #64748b;
+      font-weight: 600;
+      padding: 3px 6px;
+      white-space: nowrap;
+    }
+
+    .boro-table th:first-child { text-align: left; }
+
+    .boro-table td {
+      text-align: right;
+      padding: 4px 6px;
+      border-top: 1px solid #1e3a5f33;
+      white-space: nowrap;
+    }
+
+    .boro-table td:first-child { text-align: left; font-weight: 500; }
+
+    .boro-table tr:last-child td { font-weight: 600; color: #94a3b8; }
+
+    .delta-up   { color: #22c55e; font-size: 0.68rem; }
+    .delta-down { color: #ef4444; font-size: 0.68rem; }
   </style>
 </head>
 <body>
@@ -556,11 +587,12 @@ async function fetchAll() {
     });
     setStatus("Loading cached data…");
     const records = await fetch(`data/${manifest.latest}.json`).then((r) => r.json());
-    if (manifest.previous) {
-      try {
-        diffData = await fetch(`data/diff-${manifest.latest}.json`).then((r) => r.json());
-      } catch (_) {}
-    }
+    try {
+      diffData = await fetch(`data/diff-${manifest.latest}.json`).then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      });
+    } catch (_) {}
     return records;
   } catch (_) {
     setStatus("No cached data — fetching live…");
@@ -629,6 +661,7 @@ function buildPopup(row) {
     initSearch();
 
     if (diffData) initChangesModal(diffData);
+    else document.getElementById("changes-btn").hidden = false; // show even without diff file
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`);
@@ -637,38 +670,102 @@ function buildPopup(row) {
 
 // ── Changes modal ──────────────────────────────────────────────────────────
 function initChangesModal(diff) {
-  const btn     = document.getElementById("changes-btn");
-  const modal   = document.getElementById("changes-modal");
-  const closeBtn= document.getElementById("modal-close-btn");
-  const subtitle= document.getElementById("modal-subtitle");
-  const summary = document.getElementById("modal-summary");
-  const body    = document.getElementById("modal-body");
+  const btn      = document.getElementById("changes-btn");
+  const modal    = document.getElementById("changes-modal");
+  const closeBtn = document.getElementById("modal-close-btn");
+  const subtitle = document.getElementById("modal-subtitle");
+  const summaryEl= document.getElementById("modal-summary");
+  const body     = document.getElementById("modal-body");
 
   const s = diff.summary;
-  btn.textContent = `Changes (${s.improved + s.declined + s.added + s.removed})`;
+  const totalChanges = s ? (s.improved + s.declined + s.added + s.removed) : 0;
+  btn.textContent = totalChanges > 0 ? `Changes (${totalChanges})` : "Borough Stats";
   btn.hidden = false;
 
-  subtitle.textContent = `${diff.previous} → ${diff.date}`;
+  subtitle.textContent = diff.previous ? `${diff.previous} → ${diff.date}` : diff.date;
 
-  summary.innerHTML = `
+  summaryEl.innerHTML = s ? `
     <span class="summary-chip chip-improved">↑ ${s.improved} improved</span>
     <span class="summary-chip chip-declined">↓ ${s.declined} declined</span>
     <span class="summary-chip chip-added">+ ${s.added} new</span>
-    <span class="summary-chip chip-removed">− ${s.removed} closed</span>`;
+    <span class="summary-chip chip-removed">− ${s.removed} closed</span>` : "";
 
+  // ── Borough breakdown table ──────────────────────────────────────────────
+  function renderDelta(delta) {
+    if (delta === null || delta === undefined) return "";
+    if (delta === 0) return "";
+    const cls   = delta > 0 ? "delta-up" : "delta-down";
+    const arrow = delta > 0 ? "↑" : "↓";
+    const sign  = delta > 0 ? "+" : "";
+    return ` <span class="${cls}">${sign}${delta}${arrow}</span>`;
+  }
+
+  function renderPct(gdata) {
+    return `${gdata.pct}%${renderDelta(gdata.delta)}`;
+  }
+
+  const GRADES = ["A", "B", "C", "Z", "P", "N"];
+  const bb = diff.boro_breakdown || {};
+  const boros = Object.keys(bb);
+
+  let boroTableHtml = "";
+  if (boros.length) {
+    // Totals row
+    const totals = {};
+    let grandTotal = 0;
+    for (const g of GRADES) {
+      totals[g] = { count: 0, pct: 0, delta: null, _sumPct: 0, _n: 0 };
+    }
+    for (const boro of boros) {
+      grandTotal += bb[boro].total;
+      for (const g of GRADES) {
+        totals[g].count += bb[boro].grades[g].count;
+      }
+    }
+    // Recompute totals pct from counts
+    for (const g of GRADES) {
+      totals[g].pct = grandTotal ? round1(totals[g].count / grandTotal * 100) : 0;
+    }
+
+    const rows = boros.map((boro) => {
+      const cells = GRADES.map((g) => `<td>${renderPct(bb[boro].grades[g])}</td>`).join("");
+      return `<tr><td>${boro}</td>${cells}<td>${bb[boro].total.toLocaleString()}</td></tr>`;
+    }).join("");
+
+    const totalCells = GRADES.map((g) => `<td>${totals[g].pct}%</td>`).join("");
+
+    boroTableHtml = `<div class="diff-section">
+      <h3>Borough breakdown</h3>
+      <div style="overflow-x:auto">
+        <table class="boro-table">
+          <thead><tr>
+            <th>Borough</th>
+            ${GRADES.map((g) => `<th style="color:${gradeColor(g)}">${g}</th>`).join("")}
+            <th>Total</th>
+          </tr></thead>
+          <tbody>
+            ${rows}
+            <tr><td>All boroughs</td>${totalCells}<td>${grandTotal.toLocaleString()}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── Grade change sections ────────────────────────────────────────────────
   function gradeChip(g) {
     return `<span class="diff-grade" style="background:${gradeColor(g)}">${g}</span>`;
   }
 
   function renderSection(title, items, renderItem) {
-    if (!items.length) return "";
+    if (!items || !items.length) return "";
     return `<div class="diff-section">
       <h3>${title} (${items.length})</h3>
       ${items.map(renderItem).join("")}
     </div>`;
   }
 
-  body.innerHTML =
+  body.innerHTML = boroTableHtml +
     renderSection("Grade improvements", diff.improved, (r) => `
       <div class="diff-item">
         ${gradeChip(r.from)}<span class="diff-arrow">→</span>${gradeChip(r.to)}
@@ -702,6 +799,8 @@ function initChangesModal(diff) {
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) close(); });
 }
+
+function round1(n) { return Math.round(n * 10) / 10; }
 
 // ── Geolocation ────────────────────────────────────────────────────────────
 (function () {

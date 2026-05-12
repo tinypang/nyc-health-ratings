@@ -14,6 +14,7 @@ API_BASE = "https://data.cityofnewyork.us/resource/43nn-pn8j.json"
 PAGE_SIZE = 50000
 KEEP_WEEKS = 4
 FIELDS = "camis,dba,boro,cuisine_description,latitude,longitude,grade,grade_date,inspection_date,score"
+GRADES = ["A", "B", "C", "Z", "P", "N"]
 GRADE_ORDER = {"A": 1, "B": 2, "C": 3, "Z": 4, "P": 4, "N": 5}
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -63,6 +64,44 @@ def load_data_file(date_str):
         return None
     with open(path) as f:
         return {r["camis"]: r for r in json.load(f)}
+
+
+def compute_boro_breakdown(records):
+    """Grade counts and percentages per borough. delta is None until filled by add_boro_deltas."""
+    from collections import defaultdict
+    counts = defaultdict(lambda: defaultdict(int))
+    for r in records:
+        boro  = (r.get("boro") or "Unknown").strip()
+        grade = r.get("grade") or "N"
+        if grade not in GRADES:
+            grade = "N"
+        counts[boro][grade] += 1
+
+    breakdown = {}
+    for boro in sorted(counts.keys()):
+        total = sum(counts[boro].values())
+        breakdown[boro] = {
+            "total": total,
+            "grades": {
+                g: {
+                    "count": counts[boro].get(g, 0),
+                    "pct":   round(counts[boro].get(g, 0) / total * 100, 1) if total else 0.0,
+                    "delta": None,
+                }
+                for g in GRADES
+            },
+        }
+    return breakdown
+
+
+def add_boro_deltas(curr_breakdown, prev_breakdown):
+    """Mutate curr_breakdown in-place, setting delta = curr_pct - prev_pct for each cell."""
+    for boro, data in curr_breakdown.items():
+        if boro not in prev_breakdown:
+            continue
+        for grade, gdata in data["grades"].items():
+            prev_pct = prev_breakdown[boro]["grades"].get(grade, {}).get("pct", 0.0)
+            gdata["delta"] = round(gdata["pct"] - prev_pct, 1)
 
 
 def compute_diff(current, prev_map, today, prev_date):
@@ -123,17 +162,34 @@ def main():
     manifest = load_manifest()
     prev_date = manifest.get("latest")
 
+    # Borough breakdown for current week (deltas added below if prev exists)
+    curr_breakdown = compute_boro_breakdown(records)
+
+    # Start with an empty diff skeleton (always written, even on first run)
+    diff = {
+        "date": today,
+        "previous": None,
+        "summary": None,
+        "added": [], "removed": [], "improved": [], "declined": [],
+        "boro_breakdown": curr_breakdown,
+    }
+
     if prev_date and prev_date != today:
         prev_map = load_data_file(prev_date)
         if prev_map:
             print(f"Diffing against {prev_date}…")
-            diff = compute_diff(records, prev_map, today, prev_date)
+            grade_diff = compute_diff(records, prev_map, today, prev_date)
+            diff.update({k: grade_diff[k] for k in ("previous", "summary", "added", "removed", "improved", "declined")})
             s = diff["summary"]
             print(f"  +{s['added']} added  -{s['removed']} removed  ↑{s['improved']} improved  ↓{s['declined']} declined")
-            diff_path = os.path.join(DATA_DIR, f"diff-{today}.json")
-            with open(diff_path, "w") as f:
-                json.dump(diff, f, separators=(",", ":"))
-            print(f"Saved {diff_path}")
+
+            prev_breakdown = compute_boro_breakdown(list(prev_map.values()))
+            add_boro_deltas(curr_breakdown, prev_breakdown)
+
+    diff_path = os.path.join(DATA_DIR, f"diff-{today}.json")
+    with open(diff_path, "w") as f:
+        json.dump(diff, f, separators=(",", ":"))
+    print(f"Saved {diff_path}")
 
     weeks = manifest.get("weeks", [])
     if today not in weeks:
