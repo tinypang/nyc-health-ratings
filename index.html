@@ -281,8 +281,8 @@
 <script>
 // ── Map setup ──────────────────────────────────────────────────────────────
 const map = L.map("map", {
-  center: [40.7128, -74.006],
-  zoom: 12,
+  center: [40.7359, -73.9911], // Union Square fallback
+  zoom: 14,
   preferCanvas: true,
 });
 
@@ -492,6 +492,15 @@ function buildPopup(row) {
     );
   });
 })();
+
+// ── Auto-locate on load ────────────────────────────────────────────────────
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+    () => {}, // silently ignore — already centred on Union Square
+    { timeout: 5000, maximumAge: 60000 }
+  );
+}
 
 // ── Search ─────────────────────────────────────────────────────────────────
 function initSearch() {
