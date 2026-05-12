@@ -29,16 +29,6 @@ An interactive map of every NYC food establishment, coloured by its most recent 
 
 Map tiles are provided by [CARTO](https://carto.com/) (Dark Matter style) via [OpenStreetMap](https://www.openstreetmap.org/) contributors.
 
-## Running locally
-
-No build step required — it's a single HTML file.
-
-```bash
-python3 -m http.server 8080
-```
-
-Then open [http://localhost:8080](http://localhost:8080).
-
 ## Live site
 
-[health-ratings-iy7o67um4-tiny-s-projects.vercel.app](https://health-ratings-iy7o67um4-tiny-s-projects.vercel.app/)
+[https://nyc-health-ratings.vercel.app/](https://nyc-health-ratings.vercel.app/))
