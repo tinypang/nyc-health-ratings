@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NYC Food Health Ratings</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 10px 16px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      z-index: 1000;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+      opacity: 1;
+      transition: opacity 0.2s;
+    }
+
+    .legend-item.hidden { opacity: 0.35; }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1.5px solid rgba(255,255,255,0.25);
+    }
+
+    .dot-a  { background: #22c55e; }
+    .dot-b  { background: #eab308; }
+    .dot-c  { background: #ef4444; }
+    .dot-p  { background: #a855f7; }
+    .dot-z  { background: #f97316; }
+    .dot-na { background: #6b7280; }
+
+    #search-wrap {
+      position: relative;
+      margin-left: auto;
+    }
+
+    #search-input {
+      background: #0f3460;
+      border: 1px solid #1e4d8c;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      padding: 5px 10px 5px 30px;
+      width: 220px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #search-input:focus { border-color: #3b82f6; }
+    #search-input::placeholder { color: #64748b; }
+
+    #search-icon {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #64748b;
+      pointer-events: none;
+      font-size: 0.85rem;
+    }
+
+    #search-results {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      z-index: 2000;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    #search-results.open { display: block; }
+
+    .search-result {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #1e3a5f22;
+      transition: background 0.15s;
+    }
+
+    .search-result:last-child { border-bottom: none; }
+    .search-result:hover { background: #0f3460; }
+
+    .result-grade {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.75rem;
+      color: #fff;
+    }
+
+    .result-info { overflow: hidden; }
+
+    .result-name {
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-meta {
+      font-size: 0.7rem;
+      color: #64748b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .no-results {
+      padding: 12px;
+      font-size: 0.8rem;
+      color: #64748b;
+      text-align: center;
+    }
+
+    #status {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    #map { flex: 1; }
+
+    .leaflet-popup-content-wrapper {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
+    .leaflet-popup-tip { background: #1e293b; }
+
+    .popup-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+
+    .popup-grade {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+    }
+
+    .popup-meta {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .popup-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .popup-link:hover { text-decoration: underline; }
+
+    #locate-btn {
+      position: absolute;
+      bottom: 24px;
+      right: 10px;
+      z-index: 1000;
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      transition: background 0.15s, border-color 0.15s;
+      line-height: 1;
+    }
+
+    #locate-btn:hover { background: #0f3460; border-color: #3b82f6; }
+    #locate-btn.locating { border-color: #3b82f6; animation: pulse 1s infinite; }
+    #locate-btn.error { border-color: #ef4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>NYC Food Health Ratings</h1>
+  <div class="legend">
+    <div class="legend-item" data-grade="A"><div class="dot dot-a"></div>A — Excellent</div>
+    <div class="legend-item" data-grade="B"><div class="dot dot-b"></div>B — Good</div>
+    <div class="legend-item" data-grade="C"><div class="dot dot-c"></div>C — Needs improvement</div>
+    <div class="legend-item" data-grade="P"><div class="dot dot-p"></div>P — Pending re-grade</div>
+    <div class="legend-item" data-grade="Z"><div class="dot dot-z"></div>Z — Grade pending</div>
+    <div class="legend-item" data-grade="N"><div class="dot dot-na"></div>N — Not yet graded</div>
+  </div>
+  <div id="search-wrap">
+    <span id="search-icon">&#9906;</span>
+    <input id="search-input" type="text" placeholder="Search restaurants…" autocomplete="off" disabled />
+    <div id="search-results"></div>
+  </div>
+  <div id="status">Loading…</div>
+</header>
+
+<div id="map"></div>
+<button id="locate-btn" title="Centre on my location">◎</button>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+// ── Map setup ──────────────────────────────────────────────────────────────
+const map = L.map("map", {
+  center: [40.7128, -74.006],
+  zoom: 12,
+  preferCanvas: true,
+});
+
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── Grade colours ──────────────────────────────────────────────────────────
+const GRADE_COLOR = {
+  A: "#22c55e",
+  B: "#eab308",
+  C: "#ef4444",
+  P: "#a855f7",
+  Z: "#f97316",
+  N: "#6b7280",
+};
+
+function gradeColor(grade) {
+  return GRADE_COLOR[grade] || GRADE_COLOR.N;
+}
+
+// ── Search index ───────────────────────────────────────────────────────────
+const allMarkers = []; // {row, marker, grade}
+
+// ── Marker cluster groups per grade ───────────────────────────────────────
+const clusterGroups = {};
+const visibleGrades = new Set(["A", "B", "C", "P", "Z", "N"]);
+
+for (const grade of Object.keys(GRADE_COLOR)) {
+  const color = gradeColor(grade);
+  clusterGroups[grade] = L.markerClusterGroup({
+    maxClusterRadius: 40,
+    iconCreateFunction(cluster) {
+      const count = cluster.getChildCount();
+      const size = count < 100 ? 32 : count < 1000 ? 40 : 48;
+      return L.divIcon({
+        html: `<div style="
+          background:${color};
+          color:#000;
+          width:${size}px;height:${size}px;
+          border-radius:50%;
+          display:flex;align-items:center;justify-content:center;
+          font-weight:700;font-size:${size < 40 ? 11 : 13}px;
+          border:2px solid rgba(255,255,255,0.4);
+          box-shadow:0 2px 6px rgba(0,0,0,0.5);">${count}</div>`,
+        className: "",
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+    },
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+  });
+  clusterGroups[grade].addTo(map);
+}
+
+// ── Legend toggle ──────────────────────────────────────────────────────────
+document.querySelectorAll(".legend-item").forEach((el) => {
+  el.addEventListener("click", () => {
+    const grade = el.dataset.grade;
+    if (visibleGrades.has(grade)) {
+      visibleGrades.delete(grade);
+      map.removeLayer(clusterGroups[grade]);
+      el.classList.add("hidden");
+    } else {
+      visibleGrades.add(grade);
+      map.addLayer(clusterGroups[grade]);
+      el.classList.remove("hidden");
+    }
+  });
+});
+
+// ── Fetch all records with pagination ─────────────────────────────────────
+const API_BASE = "https://data.cityofnewyork.us/resource/43nn-pn8j.json";
+const PAGE_SIZE = 50000;
+const statusEl = document.getElementById("status");
+
+function setStatus(msg) {
+  statusEl.textContent = msg;
+}
+
+async function fetchPage(offset) {
+  const params = new URLSearchParams({
+    $limit: PAGE_SIZE,
+    $offset: offset,
+    $where: "latitude IS NOT NULL AND grade IS NOT NULL",
+    $select: "camis,dba,boro,cuisine_description,latitude,longitude,grade,grade_date,inspection_date,score",
+    $order: "inspection_date DESC",
+  });
+  const res = await fetch(`${API_BASE}?${params}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchAll() {
+  const seen = new Map(); // camis → record (latest grade per restaurant)
+  let offset = 0;
+  let totalFetched = 0;
+
+  while (true) {
+    setStatus(`Fetching records ${offset + 1}…`);
+    const page = await fetchPage(offset);
+    if (page.length === 0) break;
+
+    for (const row of page) {
+      if (!seen.has(row.camis)) {
+        seen.set(row.camis, row);
+      }
+    }
+
+    totalFetched += page.length;
+    setStatus(`Loaded ${totalFetched.toLocaleString()} records…`);
+
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return [...seen.values()];
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function buildPopup(row) {
+  const grade = row.grade || "N";
+  const color = gradeColor(grade);
+  const dohmhUrl = `https://a816-health.nyc.gov/ABCEatsRestaurants/#/restaurant/${row.camis}`;
+  return `
+    <div class="popup-name">${row.dba || "Unknown"}</div>
+    <div class="popup-grade" style="background:${color};color:${grade === "B" || grade === "N" ? "#000" : "#fff"}">${grade}</div>
+    <div class="popup-meta">
+      ${row.cuisine_description ? `<b>Cuisine:</b> ${row.cuisine_description}<br>` : ""}
+      ${row.boro ? `<b>Borough:</b> ${row.boro}<br>` : ""}
+      ${row.score != null ? `<b>Score:</b> ${row.score}<br>` : ""}
+      <b>Grade date:</b> ${formatDate(row.grade_date)}<br>
+      <b>Last inspection:</b> ${formatDate(row.inspection_date)}
+    </div>
+    <a class="popup-link" href="${dohmhUrl}" target="_blank" rel="noopener">View violations on DOHMH ↗</a>`;
+}
+
+(async () => {
+  try {
+    const records = await fetchAll();
+    setStatus(`Rendering ${records.length.toLocaleString()} restaurants…`);
+
+    const byGrade = {};
+    for (const grade of Object.keys(GRADE_COLOR)) byGrade[grade] = [];
+
+    for (const row of records) {
+      const lat = parseFloat(row.latitude);
+      const lng = parseFloat(row.longitude);
+      if (isNaN(lat) || isNaN(lng)) continue;
+      const grade = row.grade in GRADE_COLOR ? row.grade : "N";
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 5,
+        color: gradeColor(grade),
+        fillColor: gradeColor(grade),
+        fillOpacity: 0.85,
+        weight: 0.8,
+        opacity: 0.9,
+      });
+
+      marker.bindPopup(buildPopup(row), { maxWidth: 240 });
+      clusterGroups[grade].addLayer(marker);
+      allMarkers.push({ row, marker, grade });
+    }
+
+    const gradeCount = {};
+    for (const g of Object.keys(GRADE_COLOR)) {
+      gradeCount[g] = clusterGroups[g].getLayers().length;
+    }
+    const total = Object.values(gradeCount).reduce((a, b) => a + b, 0);
+    setStatus(`${total.toLocaleString()} restaurants`);
+
+    // Enable search now that allMarkers is populated
+    initSearch();
+  } catch (err) {
+    console.error(err);
+    setStatus(`Error: ${err.message}`);
+  }
+})();
+
+// ── Geolocation ────────────────────────────────────────────────────────────
+(function () {
+  const btn = document.getElementById("locate-btn");
+  if (!navigator.geolocation) { btn.style.display = "none"; return; }
+
+  btn.addEventListener("click", () => {
+    btn.classList.add("locating");
+    btn.classList.remove("error");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        btn.classList.remove("locating");
+        map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+      },
+      () => {
+        btn.classList.remove("locating");
+        btn.classList.add("error");
+        setTimeout(() => btn.classList.remove("error"), 2000);
+      },
+      { timeout: 10000 }
+    );
+  });
+})();
+
+// ── Search ─────────────────────────────────────────────────────────────────
+function initSearch() {
+  const input = document.getElementById("search-input");
+  const resultsEl = document.getElementById("search-results");
+
+  input.disabled = false;
+  input.placeholder = "Search restaurants…";
+
+  function closeResults() {
+    resultsEl.classList.remove("open");
+    resultsEl.innerHTML = "";
+  }
+
+  function showResults(query) {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) { closeResults(); return; }
+
+    const matches = [];
+    for (const entry of allMarkers) {
+      if (matches.length >= 20) break;
+      if ((entry.row.dba || "").toLowerCase().includes(q)) {
+        matches.push(entry);
+      }
+    }
+
+    resultsEl.innerHTML = "";
+    if (matches.length === 0) {
+      resultsEl.innerHTML = `<div class="no-results">No restaurants found</div>`;
+    } else {
+      for (const { row, marker, grade } of matches) {
+        const color = gradeColor(grade);
+        const item = document.createElement("div");
+        item.className = "search-result";
+        item.innerHTML = `
+          <div class="result-grade" style="background:${color}">${grade}</div>
+          <div class="result-info">
+            <div class="result-name">${row.dba || "Unknown"}</div>
+            <div class="result-meta">${[row.cuisine_description, row.boro].filter(Boolean).join(" · ")}</div>
+          </div>`;
+        item.addEventListener("click", () => {
+          closeResults();
+          input.value = row.dba || "";
+          // Make the grade layer visible if it was hidden
+          if (!visibleGrades.has(grade)) {
+            visibleGrades.add(grade);
+            map.addLayer(clusterGroups[grade]);
+            document.querySelector(`.legend-item[data-grade="${grade}"]`)?.classList.remove("hidden");
+          }
+          clusterGroups[grade].zoomToShowLayer(marker, () => marker.openPopup());
+        });
+        resultsEl.appendChild(item);
+      }
+    }
+    resultsEl.classList.add("open");
+  }
+
+  input.addEventListener("input", () => showResults(input.value));
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeResults(); input.blur(); } });
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("search-wrap").contains(e.target)) closeResults();
+  });
+}
+</script>
+</body>
+</html>
