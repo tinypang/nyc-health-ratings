@@ -250,6 +250,139 @@
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.4; }
     }
+
+    #changes-btn {
+      background: #0f3460;
+      border: 1px solid #1e4d8c;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 0.78rem;
+      padding: 5px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    #changes-btn:hover { background: #1e4d8c; border-color: #3b82f6; }
+
+    #changes-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    #changes-modal[hidden] { display: none; }
+
+    .modal-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+      width: 100%;
+      max-width: 560px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+    }
+
+    .modal-header h2 { font-size: 0.95rem; font-weight: 600; }
+    .modal-header p  { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .modal-close:hover { background: #334155; color: #e2e8f0; }
+
+    .modal-summary {
+      display: flex;
+      gap: 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .summary-chip {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .chip-added    { background: #14532d; color: #86efac; }
+    .chip-removed  { background: #450a0a; color: #fca5a5; }
+    .chip-improved { background: #1e3a5f; color: #93c5fd; }
+    .chip-declined { background: #431407; color: #fdba74; }
+
+    .modal-body {
+      overflow-y: auto;
+      padding: 12px 18px;
+      flex: 1;
+    }
+
+    .diff-section { margin-bottom: 18px; }
+
+    .diff-section h3 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .diff-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e3a5f22;
+      font-size: 0.8rem;
+    }
+
+    .diff-item:last-child { border-bottom: none; }
+
+    .diff-grade {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.7rem;
+      color: #fff;
+    }
+
+    .diff-arrow { color: #64748b; font-size: 0.7rem; flex-shrink: 0; }
+
+    .diff-name { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .diff-meta { font-size: 0.7rem; color: #64748b; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -269,8 +402,23 @@
     <input id="search-input" type="text" placeholder="Search restaurants…" autocomplete="off" disabled />
     <div id="search-results"></div>
   </div>
+  <button id="changes-btn" hidden>Changes</button>
   <div id="status">Loading…</div>
 </header>
+
+<div id="changes-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h2>Weekly changes</h2>
+        <p id="modal-subtitle"></p>
+      </div>
+      <button class="modal-close" id="modal-close-btn">&#x2715;</button>
+    </div>
+    <div class="modal-summary" id="modal-summary"></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
 
 <div id="map"></div>
 <button id="locate-btn" title="Centre on my location">◎</button>
@@ -357,10 +505,12 @@ document.querySelectorAll(".legend-item").forEach((el) => {
   });
 });
 
-// ── Fetch all records with pagination ─────────────────────────────────────
+// ── Data loading ───────────────────────────────────────────────────────────
 const API_BASE = "https://data.cityofnewyork.us/resource/43nn-pn8j.json";
 const PAGE_SIZE = 50000;
 const statusEl = document.getElementById("status");
+
+let diffData = null;
 
 function setStatus(msg) {
   statusEl.textContent = msg;
@@ -379,30 +529,43 @@ async function fetchPage(offset) {
   return res.json();
 }
 
-async function fetchAll() {
-  const seen = new Map(); // camis → record (latest grade per restaurant)
+async function fetchAllFromAPI() {
+  const seen = new Map();
   let offset = 0;
   let totalFetched = 0;
-
   while (true) {
     setStatus(`Fetching records ${offset + 1}…`);
     const page = await fetchPage(offset);
     if (page.length === 0) break;
-
     for (const row of page) {
-      if (!seen.has(row.camis)) {
-        seen.set(row.camis, row);
-      }
+      if (!seen.has(row.camis)) seen.set(row.camis, row);
     }
-
     totalFetched += page.length;
     setStatus(`Loaded ${totalFetched.toLocaleString()} records…`);
-
     if (page.length < PAGE_SIZE) break;
     offset += PAGE_SIZE;
   }
-
   return [...seen.values()];
+}
+
+async function fetchAll() {
+  try {
+    const manifest = await fetch("data/manifest.json").then((r) => {
+      if (!r.ok) throw new Error("no manifest");
+      return r.json();
+    });
+    setStatus("Loading cached data…");
+    const records = await fetch(`data/${manifest.latest}.json`).then((r) => r.json());
+    if (manifest.previous) {
+      try {
+        diffData = await fetch(`data/diff-${manifest.latest}.json`).then((r) => r.json());
+      } catch (_) {}
+    }
+    return records;
+  } catch (_) {
+    setStatus("No cached data — fetching live…");
+    return fetchAllFromAPI();
+  }
 }
 
 function formatDate(dateStr) {
@@ -464,11 +627,81 @@ function buildPopup(row) {
 
     // Enable search now that allMarkers is populated
     initSearch();
+
+    if (diffData) initChangesModal(diffData);
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`);
   }
 })();
+
+// ── Changes modal ──────────────────────────────────────────────────────────
+function initChangesModal(diff) {
+  const btn     = document.getElementById("changes-btn");
+  const modal   = document.getElementById("changes-modal");
+  const closeBtn= document.getElementById("modal-close-btn");
+  const subtitle= document.getElementById("modal-subtitle");
+  const summary = document.getElementById("modal-summary");
+  const body    = document.getElementById("modal-body");
+
+  const s = diff.summary;
+  btn.textContent = `Changes (${s.improved + s.declined + s.added + s.removed})`;
+  btn.hidden = false;
+
+  subtitle.textContent = `${diff.previous} → ${diff.date}`;
+
+  summary.innerHTML = `
+    <span class="summary-chip chip-improved">↑ ${s.improved} improved</span>
+    <span class="summary-chip chip-declined">↓ ${s.declined} declined</span>
+    <span class="summary-chip chip-added">+ ${s.added} new</span>
+    <span class="summary-chip chip-removed">− ${s.removed} closed</span>`;
+
+  function gradeChip(g) {
+    return `<span class="diff-grade" style="background:${gradeColor(g)}">${g}</span>`;
+  }
+
+  function renderSection(title, items, renderItem) {
+    if (!items.length) return "";
+    return `<div class="diff-section">
+      <h3>${title} (${items.length})</h3>
+      ${items.map(renderItem).join("")}
+    </div>`;
+  }
+
+  body.innerHTML =
+    renderSection("Grade improvements", diff.improved, (r) => `
+      <div class="diff-item">
+        ${gradeChip(r.from)}<span class="diff-arrow">→</span>${gradeChip(r.to)}
+        <span class="diff-name">${r.dba || "Unknown"}</span>
+        <span class="diff-meta">${r.boro || ""}</span>
+      </div>`) +
+    renderSection("Grade declines", diff.declined, (r) => `
+      <div class="diff-item">
+        ${gradeChip(r.from)}<span class="diff-arrow">→</span>${gradeChip(r.to)}
+        <span class="diff-name">${r.dba || "Unknown"}</span>
+        <span class="diff-meta">${r.boro || ""}</span>
+      </div>`) +
+    renderSection("New restaurants", diff.added, (r) => `
+      <div class="diff-item">
+        ${gradeChip(r.grade || "N")}
+        <span class="diff-name">${r.dba || "Unknown"}</span>
+        <span class="diff-meta">${r.boro || ""}</span>
+      </div>`) +
+    renderSection("Closed / removed", diff.removed, (r) => `
+      <div class="diff-item">
+        ${gradeChip(r.grade || "N")}
+        <span class="diff-name">${r.dba || "Unknown"}</span>
+        <span class="diff-meta">${r.boro || ""}</span>
+      </div>`);
+
+  function open()  { modal.hidden = false; document.body.style.overflow = "hidden"; }
+  function close() { modal.hidden = true;  document.body.style.overflow = ""; }
+
+  btn.addEventListener("click", open);
+  closeBtn.addEventListener("click", close);
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) close(); });
+}
 
 // ── Geolocation ────────────────────────────────────────────────────────────
 (function () {
