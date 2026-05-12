@@ -41,4 +41,4 @@ Then open [http://localhost:8080](http://localhost:8080).
 
 ## Live site
 
-[tinypang.github.io/health-ratings](https://tinypang.github.io/health-ratings)
+[health-ratings-iy7o67um4-tiny-s-projects.vercel.app](https://health-ratings-iy7o67um4-tiny-s-projects.vercel.app/)
