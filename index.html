@@ -413,7 +413,7 @@ function formatDate(dateStr) {
 function buildPopup(row) {
   const grade = row.grade || "N";
   const color = gradeColor(grade);
-  const dohmhUrl = `https://a816-health.nyc.gov/ABCEatsRestaurants/#/restaurant/${row.camis}`;
+  const dohmhUrl = `https://a816-health.nyc.gov/ABCEatsRestaurants/#!/Search/${row.camis}`;
   return `
     <div class="popup-name">${row.dba || "Unknown"}</div>
     <div class="popup-grade" style="background:${color};color:${grade === "B" || grade === "N" ? "#000" : "#fff"}">${grade}</div>
@@ -481,7 +481,7 @@ function buildPopup(row) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         btn.classList.remove("locating");
-        map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        map.setView([pos.coords.latitude, pos.coords.longitude], 18);
       },
       () => {
         btn.classList.remove("locating");
