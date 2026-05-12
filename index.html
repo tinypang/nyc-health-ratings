@@ -729,7 +729,7 @@ function initChangesModal(diff) {
 // ── Auto-locate on load ────────────────────────────────────────────────────
 if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(
-    (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+    (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 18),
     () => {}, // silently ignore — already centred on Union Square
     { timeout: 5000, maximumAge: 60000 }
   );
