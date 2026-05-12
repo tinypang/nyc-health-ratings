@@ -1,0 +1,31 @@
+name: Fetch Weekly Data
+
+on:
+  schedule:
+    # Monday 5 pm EST (22:00 UTC); runs at 6 pm EDT in summer
+    - cron: '0 22 * * 1'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch restaurant data
+        run: python scripts/fetch_data.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "chore: weekly restaurant data $(date -u +%Y-%m-%d)"
+          git push
