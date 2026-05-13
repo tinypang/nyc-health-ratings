@@ -37,4 +37,51 @@ function resolveMapView(userLat, userLng, nycFeatures) {
   return { ...UNION_SQUARE };
 }
 
-module.exports = { gradeColor, formatDate, resolveMapView, GRADE_COLOR, UNION_SQUARE };
+/**
+ * Determines what the page-load auto-locate should do when geolocation resolves.
+ *
+ * Two cases:
+ *  - GeoJSON already loaded  → decide immediately; return a view or null
+ *  - GeoJSON still loading   → return 'pending' so the caller can park the
+ *                              position and pass it to applyPendingAutoLocate
+ *                              once the features arrive
+ *
+ * Returns:
+ *  { lat, lng, zoom: 18 }  — user is in NYC, set this view
+ *  null                    — user is outside NYC, do nothing (stay on Union Square)
+ *  'pending'               — features not loaded yet, store position for later
+ */
+function resolveAutoLocate(userLat, userLng, nycFeatures) {
+  const { isInNYC } = require("./geo");
+  if (nycFeatures === null || nycFeatures === undefined) {
+    return "pending";
+  }
+  if (isInNYC(userLat, userLng, nycFeatures)) {
+    return { lat: userLat, lng: userLng, zoom: 18 };
+  }
+  return null;
+}
+
+/**
+ * Called by loadNYCBoroughBounds once features have loaded, to resolve any
+ * geolocation position that arrived before the GeoJSON was ready.
+ *
+ * Returns:
+ *  { lat, lng, zoom: 18 }  — pending position is inside NYC, set this view
+ *  null                    — no pending position, outside NYC, or GeoJSON failed
+ */
+function applyPendingAutoLocate(nycFeatures, pendingPos) {
+  const { isInNYC } = require("./geo");
+  if (!pendingPos || !nycFeatures) return null;
+  const { lat, lng } = pendingPos;
+  if (isInNYC(lat, lng, nycFeatures)) {
+    return { lat, lng, zoom: 18 };
+  }
+  return null;
+}
+
+module.exports = {
+  gradeColor, formatDate, resolveMapView,
+  resolveAutoLocate, applyPendingAutoLocate,
+  GRADE_COLOR, UNION_SQUARE,
+};
