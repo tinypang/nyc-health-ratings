@@ -836,13 +836,13 @@ function isInNYC(lat, lng) {
 (async function loadNYCBoroughBounds() {
   try {
     const res = await fetch(
-      "https://data.cityofnewyork.us/resource/7t3b-ywvw.geojson?$limit=5&$select=the_geom,boro_name"
+      "https://raw.githubusercontent.com/dwillis/nyc-maps/master/boroughs.geojson"
     );
     if (!res.ok) throw new Error();
     const gj = await res.json();
     nycBoroughFeatures = gj.features;
   } catch (_) {
-    // Silently keep using bounding box
+    // Silently keep using bounding box fallback
   }
 })();
 
