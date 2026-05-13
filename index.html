@@ -40,54 +40,150 @@
       white-space: nowrap;
     }
 
-    .filter-bar {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      align-items: center;
+    /* ── Filter dropdown menus ─────────────────────────────────────────────── */
+    .filter-menu-wrap {
+      position: relative;
     }
 
-    .filter-label {
-      font-size: 0.68rem;
-      color: #64748b;
+    .filter-menu-btn {
+      background: #16213e;
+      border: 1.5px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      padding: 5px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .filter-menu-btn:hover,
+    .filter-menu-btn.open {
+      background: #0f3460;
+      border-color: #3b82f6;
+    }
+
+    .filter-menu-btn .chevron {
+      font-size: 0.6rem;
+      opacity: 0.55;
+      transition: transform 0.15s;
+      margin-left: 2px;
+    }
+
+    .filter-menu-btn.open .chevron { transform: rotate(180deg); }
+
+    .filter-badge {
+      background: #3b82f6;
+      color: #fff;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+      line-height: 1.5;
+    }
+
+    .filter-badge.viol-badge {
+      background: rgba(251,191,36,0.85);
+      color: #000;
+    }
+
+    .filter-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.65);
+      z-index: 2000;
+      padding: 10px;
+      width: max-content;
+      max-width: min(400px, 92vw);
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .filter-dropdown.open { display: flex; }
+
+    .dropdown-label {
+      font-size: 0.65rem;
+      color: #475569;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.07em;
-      white-space: nowrap;
-      margin-right: 2px;
+      padding: 2px 4px 6px;
     }
 
+    .dropdown-actions {
+      display: flex;
+      gap: 6px;
+      padding-top: 8px;
+      border-top: 1px solid #334155;
+      margin-top: 2px;
+    }
+
+    /* ── Filter pills (used inside dropdowns) ────────────────────────────── */
     .filter-pill {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       cursor: pointer;
       user-select: none;
-      font-size: 0.78rem;
-      padding: 3px 10px 3px 7px;
-      border-radius: 20px;
-      border: 1.5px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.06);
+      font-size: 0.8rem;
+      padding: 5px 12px 5px 9px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
       white-space: nowrap;
       transition: background 0.15s, border-color 0.15s, opacity 0.15s;
     }
 
     .filter-pill:hover {
-      background: rgba(255,255,255,0.12);
-      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.28);
     }
 
+    /* Grade pills: ON by default, toggled OFF = struck-through */
     .filter-pill.off {
-      opacity: 0.38;
+      opacity: 0.35;
       background: transparent;
-      border-color: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.06);
       text-decoration: line-through;
     }
 
     .filter-pill.off:hover {
-      opacity: 0.65;
+      opacity: 0.6;
       text-decoration: none;
       background: rgba(255,255,255,0.05);
+    }
+
+    /* Violation pills: OFF by default, toggled ON = amber highlight */
+    .filter-pill[data-violation] {
+      opacity: 0.38;
+      background: transparent;
+      border-color: rgba(255,255,255,0.07);
+    }
+
+    .filter-pill[data-violation]:hover {
+      opacity: 0.65;
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .filter-pill[data-violation].viol-active {
+      opacity: 1;
+      background: rgba(251,191,36,0.1);
+      border-color: rgba(251,191,36,0.45);
+    }
+
+    .filter-pill[data-violation].viol-active:hover {
+      background: rgba(251,191,36,0.2);
+      border-color: rgba(251,191,36,0.7);
     }
 
     .filter-quick-btn {
@@ -96,7 +192,7 @@
       border-radius: 4px;
       color: #64748b;
       font-size: 0.7rem;
-      padding: 2px 8px;
+      padding: 2px 10px;
       cursor: pointer;
       white-space: nowrap;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
@@ -106,40 +202,6 @@
       background: #0f3460;
       border-color: #3b82f6;
       color: #e2e8f0;
-    }
-
-    /* Violation pills: dimmed by default (no filter), amber highlight when active */
-    .filter-pill[data-violation] {
-      opacity: 0.38;
-      background: transparent;
-      border-color: rgba(255,255,255,0.08);
-    }
-
-    .filter-pill[data-violation]:hover {
-      opacity: 0.65;
-      background: rgba(255,255,255,0.05);
-      border-color: rgba(255,255,255,0.2);
-      text-decoration: none;
-    }
-
-    .filter-pill[data-violation].viol-active {
-      opacity: 1;
-      background: rgba(251,191,36,0.12);
-      border-color: rgba(251,191,36,0.5);
-    }
-
-    .filter-pill[data-violation].viol-active:hover {
-      background: rgba(251,191,36,0.22);
-      border-color: rgba(251,191,36,0.75);
-    }
-
-    .filter-divider {
-      width: 1px;
-      height: 20px;
-      background: #334155;
-      flex-shrink: 0;
-      align-self: center;
-      margin: 0 6px;
     }
 
     .dot {
@@ -503,21 +565,41 @@
 
 <header>
   <h1>NYC Restaurant Health Ratings</h1>
-  <div class="filter-bar">
-    <span class="filter-label">Grades</span>
-    <div class="filter-pill" data-grade="A"><div class="dot dot-a"></div>A — Excellent</div>
-    <div class="filter-pill" data-grade="B"><div class="dot dot-b"></div>B — Good</div>
-    <div class="filter-pill" data-grade="C"><div class="dot dot-c"></div>C — Needs improvement</div>
-    <div class="filter-pill" data-grade="P"><div class="dot dot-p"></div>P — Pending</div>
-    <div class="filter-pill" data-grade="Z"><div class="dot dot-z"></div>Z — Grade pending</div>
-    <div class="filter-pill" data-grade="N"><div class="dot dot-na"></div>N — Not graded</div>
-    <button class="filter-quick-btn" id="filter-none">None</button>
-    <button class="filter-quick-btn" id="filter-all">All</button>
-    <span class="filter-divider"></span>
-    <span class="filter-label">Violations</span>
-    <div class="filter-pill" data-violation="rats">🐀 Rats / Mice</div>
-    <div class="filter-pill" data-violation="roaches">🪳 Roaches / Flying Insects</div>
-    <div class="filter-pill" data-violation="hygiene">🤧 Inadequate Hand Washing / Preparing Food with Illness or Injury</div>
+  <!-- Grades dropdown -->
+  <div class="filter-menu-wrap" id="grades-wrap">
+    <button class="filter-menu-btn" id="grades-btn">
+      ☰ Grades
+      <span class="filter-badge" id="grades-badge" hidden></span>
+      <span class="chevron">▾</span>
+    </button>
+    <div class="filter-dropdown" id="grades-dropdown">
+      <div class="dropdown-label">Show / hide grades</div>
+      <div class="filter-pill" data-grade="A"><div class="dot dot-a"></div>A — Excellent</div>
+      <div class="filter-pill" data-grade="B"><div class="dot dot-b"></div>B — Good</div>
+      <div class="filter-pill" data-grade="C"><div class="dot dot-c"></div>C — Needs improvement</div>
+      <div class="filter-pill" data-grade="P"><div class="dot dot-p"></div>P — Pending</div>
+      <div class="filter-pill" data-grade="Z"><div class="dot dot-z"></div>Z — Grade pending</div>
+      <div class="filter-pill" data-grade="N"><div class="dot dot-na"></div>N — Not graded</div>
+      <div class="dropdown-actions">
+        <button class="filter-quick-btn" id="filter-all">All</button>
+        <button class="filter-quick-btn" id="filter-none">None</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Violations dropdown -->
+  <div class="filter-menu-wrap" id="violations-wrap">
+    <button class="filter-menu-btn" id="violations-btn">
+      ☰ Violations
+      <span class="filter-badge viol-badge" id="violations-badge" hidden></span>
+      <span class="chevron">▾</span>
+    </button>
+    <div class="filter-dropdown" id="violations-dropdown">
+      <div class="dropdown-label">Filter to restaurants with violation on latest inspection</div>
+      <div class="filter-pill" data-violation="rats">🐀 Rats / Mice</div>
+      <div class="filter-pill" data-violation="roaches">🪳 Roaches / Flying Insects</div>
+      <div class="filter-pill" data-violation="hygiene">🤧 Inadequate Hand Washing / Preparing Food with Illness or Injury</div>
+    </div>
   </div>
   <div id="search-wrap">
     <span id="search-icon">&#9906;</span>
@@ -621,12 +703,10 @@ for (const grade of Object.keys(GRADE_COLOR)) {
 }
 
 // ── Grade + violation filters ──────────────────────────────────────────────
-let gradeCount = {};       // populated after data loads
+let gradeCount = {};
 let totalRestaurants = 0;
-const activeViolations = new Set(); // violation keys currently filtering
+const activeViolations = new Set();
 
-// A marker should be shown only when its grade is visible AND it passes
-// any active violation filter (OR across active types).
 function markerVisible(entry) {
   if (!visibleGrades.has(entry.grade)) return false;
   if (activeViolations.size === 0) return true;
@@ -638,88 +718,123 @@ function markerVisible(entry) {
 
 function updateFilterStatus() {
   if (!totalRestaurants) return;
-  const allGrades = Object.keys(GRADE_COLOR);
-
   if (visibleGrades.size === 0) {
     statusEl.textContent = "No grades selected";
     return;
   }
-  if (activeViolations.size === 0 && visibleGrades.size === allGrades.length) {
+  if (activeViolations.size === 0 && visibleGrades.size === Object.keys(GRADE_COLOR).length) {
     statusEl.textContent = `${totalRestaurants.toLocaleString()} restaurants`;
     return;
   }
-  // Count only markers that pass both filters
   const visible = allMarkers.reduce((n, e) => n + (markerVisible(e) ? 1 : 0), 0);
   statusEl.textContent = `${visible.toLocaleString()} of ${totalRestaurants.toLocaleString()} restaurants`;
 }
 
-// Re-evaluate per-marker visibility inside one grade's cluster group.
-// Used when the violation filter changes so we don't have to touch other grades.
-function syncViolationFilterForGrade(grade) {
-  const group = clusterGroups[grade];
-  const toAdd = [], toRemove = [];
-  for (const entry of allMarkers) {
-    if (entry.grade !== grade) continue;
-    const show = markerVisible(entry);
-    const has  = group.hasLayer(entry.marker);
-    if (show && !has)  toAdd.push(entry.marker);
-    if (!show && has)  toRemove.push(entry.marker);
+// Single source of truth: rebuild every cluster group from scratch based on
+// current visibleGrades + activeViolations state. Simpler and more reliable
+// than incremental add/remove which can desync from MarkerCluster internals.
+function applyFilters() {
+  for (const grade of Object.keys(GRADE_COLOR)) {
+    const group = clusterGroups[grade];
+    if (map.hasLayer(group)) map.removeLayer(group);
+    group.clearLayers();
+    if (!visibleGrades.has(grade)) continue;
+    const markers = allMarkers
+      .filter(e => e.grade === grade && markerVisible(e))
+      .map(e => e.marker);
+    if (markers.length) group.addLayers(markers);
+    map.addLayer(group);
   }
-  if (toRemove.length) group.removeLayers(toRemove);
-  if (toAdd.length)    group.addLayers(toAdd);
+  updateFilterStatus();
 }
 
+function updateGradesBadge() {
+  const badge = document.getElementById("grades-badge");
+  const total = Object.keys(GRADE_COLOR).length;
+  if (visibleGrades.size < total) {
+    badge.textContent = `${visibleGrades.size}/${total}`;
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+function updateViolationsBadge() {
+  const badge = document.getElementById("violations-badge");
+  if (activeViolations.size > 0) {
+    badge.textContent = activeViolations.size;
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+// State-only setters — call applyFilters() after to sync the map.
 function setGradeVisible(grade, on) {
   const el = document.querySelector(`.filter-pill[data-grade="${grade}"]`);
-  if (on) {
-    visibleGrades.add(grade);
-    el?.classList.remove("off");
-    if (!map.hasLayer(clusterGroups[grade])) map.addLayer(clusterGroups[grade]);
-    // If a violation filter is active, enforce it within this newly-visible grade
-    if (activeViolations.size > 0) syncViolationFilterForGrade(grade);
-  } else {
-    visibleGrades.delete(grade);
-    el?.classList.add("off");
-    if (map.hasLayer(clusterGroups[grade])) map.removeLayer(clusterGroups[grade]);
-  }
+  if (on) { visibleGrades.add(grade);    el?.classList.remove("off"); }
+  else    { visibleGrades.delete(grade); el?.classList.add("off");    }
+  updateGradesBadge();
 }
 
 function setViolationActive(violation, on) {
   const el = document.querySelector(`.filter-pill[data-violation="${violation}"]`);
-  if (on) {
-    activeViolations.add(violation);
-    el?.classList.add("viol-active");
-  } else {
-    activeViolations.delete(violation);
-    el?.classList.remove("viol-active");
-  }
-  // Sync per-marker visibility in all currently visible grade groups
-  for (const grade of visibleGrades) syncViolationFilterForGrade(grade);
-  updateFilterStatus();
+  if (on) { activeViolations.add(violation);    el?.classList.add("viol-active");    }
+  else    { activeViolations.delete(violation); el?.classList.remove("viol-active"); }
+  updateViolationsBadge();
 }
 
 document.querySelectorAll(".filter-pill[data-grade]").forEach((el) => {
   el.addEventListener("click", () => {
     setGradeVisible(el.dataset.grade, !visibleGrades.has(el.dataset.grade));
-    updateFilterStatus();
+    applyFilters();
   });
 });
 
 document.querySelectorAll(".filter-pill[data-violation]").forEach((el) => {
   el.addEventListener("click", () => {
     setViolationActive(el.dataset.violation, !activeViolations.has(el.dataset.violation));
+    applyFilters();
   });
 });
 
 document.getElementById("filter-all").addEventListener("click", () => {
   Object.keys(GRADE_COLOR).forEach(g => setGradeVisible(g, true));
-  updateFilterStatus();
+  applyFilters();
 });
 
 document.getElementById("filter-none").addEventListener("click", () => {
   Object.keys(GRADE_COLOR).forEach(g => setGradeVisible(g, false));
-  updateFilterStatus();
+  applyFilters();
 });
+
+// ── Dropdown open / close ──────────────────────────────────────────────────
+// Use mousedown (not click) for the outside-close listener so it fires
+// before the pill's click event, but we prevent it from closing when the
+// mousedown is inside a dropdown or on a menu button.
+function closeAllDropdowns() {
+  document.querySelectorAll(".filter-dropdown").forEach(d => d.classList.remove("open"));
+  document.querySelectorAll(".filter-menu-btn").forEach(b => b.classList.remove("open"));
+}
+
+["grades", "violations"].forEach((key) => {
+  const btn      = document.getElementById(`${key}-btn`);
+  const dropdown = document.getElementById(`${key}-dropdown`);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wasOpen = dropdown.classList.contains("open");
+    closeAllDropdowns();
+    if (!wasOpen) {
+      dropdown.classList.add("open");
+      btn.classList.add("open");
+    }
+  });
+  // Stop mousedown from bubbling out of the dropdown so the document
+  // mousedown listener doesn't close it mid-click.
+  dropdown.addEventListener("mousedown", (e) => e.stopPropagation());
+});
+
+document.addEventListener("mousedown", closeAllDropdowns);
 
 // ── Data loading ───────────────────────────────────────────────────────────
 const API_BASE = "https://data.cityofnewyork.us/resource/43nn-pn8j.json";
