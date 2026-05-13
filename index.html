@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NYC Restaurant Health Ratings</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2322c55e'/><text x='16' y='24' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='700' font-size='22' fill='white'>A</text></svg>">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -802,6 +803,48 @@ function initChangesModal(diff) {
 
 function round1(n) { return Math.round(n * 10) / 10; }
 
+// ── NYC polygon boundary check ─────────────────────────────────────────────
+// Borough boundaries fetched from NYC Open Data; ray-casting point-in-polygon.
+// Falls back to a loose bounding box while the fetch is in flight.
+let nycBoroughFeatures = null;
+
+function pointInRing(lng, lat, ring) {
+  // GeoJSON rings: [[lng, lat], ...]. Classic ray-casting algorithm.
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (((yi > lat) !== (yj > lat)) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+function pointInFeature(lng, lat, feature) {
+  const geom = feature.geometry;
+  const polys = geom.type === "MultiPolygon" ? geom.coordinates : [geom.coordinates];
+  return polys.some(poly => pointInRing(lng, lat, poly[0])); // poly[0] = outer ring
+}
+
+function isInNYC(lat, lng) {
+  // If polygons haven't loaded yet or failed, return false so the map
+  // stays on Union Square rather than using an inaccurate fallback.
+  if (!nycBoroughFeatures) return false;
+  return nycBoroughFeatures.some(f => pointInFeature(lng, lat, f));
+}
+
+(async function loadNYCBoroughBounds() {
+  try {
+    const res = await fetch(
+      "https://raw.githubusercontent.com/dwillis/nyc-maps/master/boroughs.geojson"
+    );
+    if (!res.ok) throw new Error();
+    const gj = await res.json();
+    nycBoroughFeatures = gj.features;
+  } catch (_) {
+    // Silently keep using bounding box fallback
+  }
+})();
+
 // ── Geolocation ────────────────────────────────────────────────────────────
 (function () {
   const btn = document.getElementById("locate-btn");
@@ -813,7 +856,15 @@ function round1(n) { return Math.round(n * 10) / 10; }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         btn.classList.remove("locating");
-        map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+        const { latitude: lat, longitude: lng } = pos.coords;
+        if (isInNYC(lat, lng)) {
+          map.setView([lat, lng], 18);
+        } else {
+          // Outside NYC — snap to Union Square and flash the button red briefly
+          map.setView([40.7359, -73.9911], 14);
+          btn.classList.add("error");
+          setTimeout(() => btn.classList.remove("error"), 2000);
+        }
       },
       () => {
         btn.classList.remove("locating");
@@ -828,8 +879,14 @@ function round1(n) { return Math.round(n * 10) / 10; }
 // ── Auto-locate on load ────────────────────────────────────────────────────
 if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(
-    (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 18),
-    () => {}, // silently ignore — already centred on Union Square
+    (pos) => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      if (isInNYC(lat, lng)) {
+        map.setView([lat, lng], 18);
+      }
+      // Outside NYC — stay on Union Square default, no action needed
+    },
+    () => {}, // silently ignore denial/error
     { timeout: 5000, maximumAge: 60000 }
   );
 }
