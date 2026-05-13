@@ -802,12 +802,49 @@ function initChangesModal(diff) {
 
 function round1(n) { return Math.round(n * 10) / 10; }
 
-// ── NYC boundary check ─────────────────────────────────────────────────────
-const NYC_BOUNDS = { minLat: 40.477, maxLat: 40.917, minLng: -74.260, maxLng: -73.700 };
-function isInNYC(lat, lng) {
-  return lat >= NYC_BOUNDS.minLat && lat <= NYC_BOUNDS.maxLat &&
-         lng >= NYC_BOUNDS.minLng && lng <= NYC_BOUNDS.maxLng;
+// ── NYC polygon boundary check ─────────────────────────────────────────────
+// Borough boundaries fetched from NYC Open Data; ray-casting point-in-polygon.
+// Falls back to a loose bounding box while the fetch is in flight.
+let nycBoroughFeatures = null;
+const NYC_BBOX = { minLat: 40.477, maxLat: 40.917, minLng: -74.260, maxLng: -73.700 };
+
+function pointInRing(lng, lat, ring) {
+  // GeoJSON rings: [[lng, lat], ...]. Classic ray-casting algorithm.
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (((yi > lat) !== (yj > lat)) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
 }
+
+function pointInFeature(lng, lat, feature) {
+  const geom = feature.geometry;
+  const polys = geom.type === "MultiPolygon" ? geom.coordinates : [geom.coordinates];
+  return polys.some(poly => pointInRing(lng, lat, poly[0])); // poly[0] = outer ring
+}
+
+function isInNYC(lat, lng) {
+  if (nycBoroughFeatures)
+    return nycBoroughFeatures.some(f => pointInFeature(lng, lat, f));
+  // Bounding-box fallback while GeoJSON is loading
+  return lat >= NYC_BBOX.minLat && lat <= NYC_BBOX.maxLat &&
+         lng >= NYC_BBOX.minLng && lng <= NYC_BBOX.maxLng;
+}
+
+(async function loadNYCBoroughBounds() {
+  try {
+    const res = await fetch(
+      "https://data.cityofnewyork.us/resource/7t3b-ywvw.geojson?$limit=5&$select=the_geom,boro_name"
+    );
+    if (!res.ok) throw new Error();
+    const gj = await res.json();
+    nycBoroughFeatures = gj.features;
+  } catch (_) {
+    // Silently keep using bounding box
+  }
+})();
 
 // ── Geolocation ────────────────────────────────────────────────────────────
 (function () {
