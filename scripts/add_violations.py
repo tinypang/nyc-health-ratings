@@ -77,7 +77,8 @@ def fetch_violations():
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
-    return {camis: data["types"] for camis, data in violations.items()}
+    return {camis: {"date": data["latest_date"], "types": data["types"]}
+            for camis, data in violations.items()}
 
 
 def main():
@@ -96,7 +97,14 @@ def main():
     print(f"  flags found for {len(violations)} restaurants")
 
     for record in records:
-        vtypes = violations.get(record["camis"], set())
+        v = violations.get(record["camis"])
+        # Only apply flags when the violation comes from the restaurant's current
+        # inspection. An old pest citation must not carry forward to a later
+        # clean inspection (date prefix comparison handles T00:00:00.000 suffix).
+        if v and v["date"][:10] == (record.get("inspection_date") or "")[:10]:
+            vtypes = v["types"]
+        else:
+            vtypes = set()
         record["rats"]    = "rats"    in vtypes
         record["roaches"] = "roaches" in vtypes
         record["hygiene"] = "hygiene" in vtypes

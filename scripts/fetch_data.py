@@ -47,8 +47,13 @@ def fetch_page(offset):
 def fetch_violations():
     """
     Fetch all rows matching pest/hygiene violation codes.
-    Returns a dict: {camis: set_of_violation_types} where each set reflects
-    only the violations found on that restaurant's most recent inspection date.
+    Returns a dict: {camis: {"date": str, "types": set}} where each entry
+    reflects only violations found on the restaurant's most recent
+    pest-violation inspection date.
+
+    Callers must compare this date against the restaurant's own
+    inspection_date before applying the flags — an old pest citation
+    should not carry forward to a later clean inspection.
     """
     codes_str = "','".join(VIOLATION_MAP.keys())
     violations = {}   # camis -> {"latest_date": str, "types": set}
@@ -83,7 +88,8 @@ def fetch_violations():
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
-    return {camis: data["types"] for camis, data in violations.items()}
+    return {camis: {"date": data["latest_date"], "types": data["types"]}
+            for camis, data in violations.items()}
 
 
 def fetch_all():
@@ -211,7 +217,14 @@ def main():
     violations = fetch_violations()
     print(f"Violation flags fetched for {len(violations)} restaurants")
     for r in records:
-        vtypes = violations.get(r["camis"], set())
+        v = violations.get(r["camis"])
+        # Only apply flags when the violation comes from the restaurant's current
+        # inspection. An old pest citation must not carry forward to a later
+        # clean inspection (date prefix comparison handles T00:00:00.000 suffix).
+        if v and v["date"][:10] == (r.get("inspection_date") or "")[:10]:
+            vtypes = v["types"]
+        else:
+            vtypes = set()
         r["rats"]    = "rats"    in vtypes
         r["roaches"] = "roaches" in vtypes
         r["hygiene"] = "hygiene" in vtypes
