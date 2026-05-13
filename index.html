@@ -520,9 +520,14 @@ for (const grade of Object.keys(GRADE_COLOR)) {
   });
   clusterGroups[grade].addTo(map);
 
-  // Hide the cluster ghost icon once spiderfied; restore it on collapse.
-  clusterGroups[grade].on("spiderfied",   (e) => e.cluster.setOpacity(0));
-  clusterGroups[grade].on("unspiderfied", (e) => e.cluster.setOpacity(1));
+  // Remove the cluster icon from the DOM when spiderfied so it can't block
+  // clicks on the individual pins behind it. Restore it on collapse.
+  clusterGroups[grade].on("spiderfied", (e) => {
+    if (e.cluster._icon) e.cluster._icon.style.display = "none";
+  });
+  clusterGroups[grade].on("unspiderfied", (e) => {
+    if (e.cluster._icon) e.cluster._icon.style.display = "";
+  });
 }
 
 // ── Legend toggle ──────────────────────────────────────────────────────────
