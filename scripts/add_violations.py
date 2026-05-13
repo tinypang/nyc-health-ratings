@@ -16,6 +16,8 @@ import ssl
 from urllib.request import urlopen
 from urllib.parse import urlencode
 
+from violations import VIOLATION_MAP, aggregate_violations, apply_flags
+
 # macOS Python 3 ships without bundled CA certs; bypass verification for public API calls
 _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.check_hostname = False
@@ -23,15 +25,6 @@ _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 API_BASE  = "https://data.cityofnewyork.us/resource/43nn-pn8j.json"
 PAGE_SIZE = 50000
-
-VIOLATION_MAP = {
-    "04K": "rats",     # live rats
-    "04L": "rats",     # live mice
-    "04M": "roaches",  # live roaches
-    "04N": "roaches",  # filth flies / food-associated flies
-    "04B": "hygiene",  # preparing food while ill or injured
-    "04D": "hygiene",  # inadequate handwashing
-}
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MANIFEST = os.path.join(DATA_DIR, "manifest.json")
@@ -74,12 +67,12 @@ def fetch_latest_inspection_dates():
 
 def fetch_violations(latest_dates):
     """
-    Fetch all matching violation rows and return {camis: set_of_types},
-    where each set reflects ONLY citations whose inspection_date matches
-    that camis's true most-recent inspection (graded or not).
+    Fetch all matching violation rows, then delegate to aggregate_violations()
+    which keeps only citations from each camis's truly latest inspection.
+    Returns {camis: set_of_types}.
     """
     codes_str = "','".join(VIOLATION_MAP.keys())
-    violations = {}   # camis -> set of types (only from rows on latest date)
+    all_rows = []
     offset = 0
     while True:
         params = urlencode({
@@ -94,23 +87,12 @@ def fetch_violations(latest_dates):
             page = json.loads(r.read())
         if not page:
             break
-        for row in page:
-            camis = row["camis"]
-            idate = row.get("inspection_date", "")
-            vtype = VIOLATION_MAP.get(row.get("violation_code", ""))
-            if not vtype:
-                continue
-            # Skip pest rows that aren't from this restaurant's truly latest
-            # inspection — an older citation must not survive a later clean one.
-            latest = latest_dates.get(camis)
-            if not latest or idate[:10] != latest[:10]:
-                continue
-            violations.setdefault(camis, set()).add(vtype)
-        print(f"  {offset + len(page)} rows, {len(violations)} unique camis", flush=True)
+        all_rows.extend(page)
+        print(f"  {offset + len(page)} rows fetched", flush=True)
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
-    return violations
+    return aggregate_violations(all_rows, latest_dates)
 
 
 def main():
@@ -133,10 +115,7 @@ def main():
     print(f"  flags found for {len(violations)} restaurants")
 
     for record in records:
-        vtypes = violations.get(record["camis"], set())
-        record["rats"]    = "rats"    in vtypes
-        record["roaches"] = "roaches" in vtypes
-        record["hygiene"] = "hygiene" in vtypes
+        apply_flags(record, violations.get(record["camis"]))
 
     with open(data_path, "w") as f:
         json.dump(records, f, separators=(",", ":"))
