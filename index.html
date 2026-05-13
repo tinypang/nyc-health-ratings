@@ -356,6 +356,30 @@
       line-height: 1.6;
     }
 
+    .popup-violations {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .popup-violation {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      width: fit-content;
+      line-height: 1.2;
+    }
+
+    .popup-violation-icon { font-size: 0.9rem; line-height: 1; }
+
     .popup-link {
       display: inline-block;
       margin-top: 8px;
@@ -914,6 +938,23 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+// Citations from the restaurant's most recent inspection only — flags come
+// pre-computed in the data file (scripts/fetch_data.py applies the
+// truly-latest-date rule).
+const VIOLATION_BADGES = [
+  { key: "rats",    icon: "🐀", label: "Rats / Mice" },
+  { key: "roaches", icon: "🪳", label: "Roaches / Flying Insects" },
+  { key: "hygiene", icon: "🤧", label: "Inadequate Hand Washing / Food Illness" },
+];
+
+function buildViolationBadges(row) {
+  const badges = VIOLATION_BADGES
+    .filter(b => row[b.key])
+    .map(b => `<span class="popup-violation"><span class="popup-violation-icon">${b.icon}</span>${b.label}</span>`)
+    .join("");
+  return badges ? `<div class="popup-violations">${badges}</div>` : "";
+}
+
 function buildPopup(row) {
   const grade = row.grade || "N";
   const color = gradeColor(grade);
@@ -928,6 +969,7 @@ function buildPopup(row) {
       <b>Grade date:</b> ${formatDate(row.grade_date)}<br>
       <b>Last inspection:</b> ${formatDate(row.inspection_date)}
     </div>
+    ${buildViolationBadges(row)}
     <a class="popup-link" href="${dohmhUrl}" target="_blank" rel="noopener">View violations on DOHMH ↗</a>`;
 }
 
