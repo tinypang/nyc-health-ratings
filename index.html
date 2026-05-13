@@ -519,6 +519,10 @@ for (const grade of Object.keys(GRADE_COLOR)) {
     zoomToBoundsOnClick: true,
   });
   clusterGroups[grade].addTo(map);
+
+  // Hide the cluster ghost icon once spiderfied; restore it on collapse.
+  clusterGroups[grade].on("spiderfied",   (e) => e.cluster.setOpacity(0));
+  clusterGroups[grade].on("unspiderfied", (e) => e.cluster.setOpacity(1));
 }
 
 // ── Legend toggle ──────────────────────────────────────────────────────────
