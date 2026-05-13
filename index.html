@@ -861,7 +861,7 @@ function isInNYC(lat, lng) {
         btn.classList.remove("locating");
         const { latitude: lat, longitude: lng } = pos.coords;
         if (isInNYC(lat, lng)) {
-          map.setView([lat, lng], 15);
+          map.setView([lat, lng], 18);
         } else {
           // Outside NYC — default to Union Square
           map.setView([40.7359, -73.9911], 14);
@@ -883,7 +883,7 @@ if (navigator.geolocation) {
     (pos) => {
       const { latitude: lat, longitude: lng } = pos.coords;
       if (isInNYC(lat, lng)) {
-        map.setView([lat, lng], 15);
+        map.setView([lat, lng], 18);
       }
       // Outside NYC — stay on Union Square default, no action needed
     },
