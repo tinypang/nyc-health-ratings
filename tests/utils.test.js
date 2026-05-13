@@ -36,11 +36,11 @@ describe("resolveMapView", () => {
     properties: {},
   }];
 
-  test("user inside NYC → their location at zoom 15", () => {
+  test("user inside NYC → their location at zoom 18", () => {
     const view = resolveMapView(40.754, -73.990, mockFeatures);
     expect(view.lat).toBeCloseTo(40.754);
     expect(view.lng).toBeCloseTo(-73.990);
-    expect(view.zoom).toBe(15);
+    expect(view.zoom).toBe(18);
   });
 
   test("user outside NYC (NJ) → Union Square at zoom 14", () => {

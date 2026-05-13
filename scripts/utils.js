@@ -24,7 +24,7 @@ function formatDate(dateStr) {
 /**
  * Given a user's geolocation and the loaded NYC borough features,
  * return the map view to set: { lat, lng, zoom }.
- * - Inside NYC  → user's location at zoom 15
+ * - Inside NYC  → user's location at zoom 18
  * - Outside NYC → Union Square at zoom 14
  */
 const UNION_SQUARE = { lat: 40.7359, lng: -73.9911, zoom: 14 };
@@ -32,7 +32,7 @@ const UNION_SQUARE = { lat: 40.7359, lng: -73.9911, zoom: 14 };
 function resolveMapView(userLat, userLng, nycFeatures) {
   const { isInNYC } = require("./geo");
   if (isInNYC(userLat, userLng, nycFeatures)) {
-    return { lat: userLat, lng: userLng, zoom: 15 };
+    return { lat: userLat, lng: userLng, zoom: 18 };
   }
   return { ...UNION_SQUARE };
 }
