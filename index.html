@@ -730,20 +730,29 @@ function updateFilterStatus() {
   statusEl.textContent = `${visible.toLocaleString()} of ${totalRestaurants.toLocaleString()} restaurants`;
 }
 
-// Single source of truth: rebuild every cluster group from scratch based on
-// current visibleGrades + activeViolations state. Simpler and more reliable
-// than incremental add/remove which can desync from MarkerCluster internals.
+// Rebuild each cluster group based on current filter state.
+//
+// IMPORTANT: we must use removeLayers(all) rather than clearLayers() to
+// remove markers before re-adding. clearLayers() does not reset the
+// __parent property that MarkerCluster sets on each child marker.
+// addLayers() silently skips any marker that still has __parent set,
+// leaving the group empty. removeLayers() correctly clears __parent first.
 function applyFilters() {
   for (const grade of Object.keys(GRADE_COLOR)) {
     const group = clusterGroups[grade];
-    if (map.hasLayer(group)) map.removeLayer(group);
-    group.clearLayers();
-    if (!visibleGrades.has(grade)) continue;
-    const markers = allMarkers
-      .filter(e => e.grade === grade && markerVisible(e))
-      .map(e => e.marker);
-    if (markers.length) group.addLayers(markers);
-    map.addLayer(group);
+
+    if (!visibleGrades.has(grade)) {
+      if (map.hasLayer(group)) map.removeLayer(group);
+      continue;
+    }
+
+    const all     = allMarkers.filter(e => e.grade === grade).map(e => e.marker);
+    const visible = allMarkers.filter(e => e.grade === grade && markerVisible(e)).map(e => e.marker);
+
+    group.removeLayers(all);           // clears __parent on each marker
+    if (visible.length) group.addLayers(visible);
+
+    if (!map.hasLayer(group)) map.addLayer(group);
   }
   updateFilterStatus();
 }
