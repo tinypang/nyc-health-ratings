@@ -40,32 +40,80 @@
       white-space: nowrap;
     }
 
-    .legend {
+    .filter-bar {
       display: flex;
-      gap: 12px;
+      gap: 6px;
       flex-wrap: wrap;
       align-items: center;
-      font-size: 0.8rem;
     }
 
-    .legend-item {
+    .filter-label {
+      font-size: 0.68rem;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      white-space: nowrap;
+      margin-right: 2px;
+    }
+
+    .filter-pill {
       display: flex;
       align-items: center;
       gap: 5px;
       cursor: pointer;
       user-select: none;
-      opacity: 1;
-      transition: opacity 0.2s;
+      font-size: 0.78rem;
+      padding: 3px 10px 3px 7px;
+      border-radius: 20px;
+      border: 1.5px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06);
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
     }
 
-    .legend-item.hidden { opacity: 0.35; }
+    .filter-pill:hover {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.35);
+    }
+
+    .filter-pill.off {
+      opacity: 0.38;
+      background: transparent;
+      border-color: rgba(255,255,255,0.08);
+      text-decoration: line-through;
+    }
+
+    .filter-pill.off:hover {
+      opacity: 0.65;
+      text-decoration: none;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .filter-quick-btn {
+      background: none;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #64748b;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .filter-quick-btn:hover {
+      background: #0f3460;
+      border-color: #3b82f6;
+      color: #e2e8f0;
+    }
 
     .dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
-      border: 1.5px solid rgba(255,255,255,0.25);
+      border: 1.5px solid rgba(255,255,255,0.3);
     }
 
     .dot-a  { background: #22c55e; }
@@ -421,13 +469,16 @@
 
 <header>
   <h1>NYC Restaurant Health Ratings</h1>
-  <div class="legend">
-    <div class="legend-item" data-grade="A"><div class="dot dot-a"></div>A — Excellent</div>
-    <div class="legend-item" data-grade="B"><div class="dot dot-b"></div>B — Good</div>
-    <div class="legend-item" data-grade="C"><div class="dot dot-c"></div>C — Needs improvement</div>
-    <div class="legend-item" data-grade="P"><div class="dot dot-p"></div>P — Pending re-grade</div>
-    <div class="legend-item" data-grade="Z"><div class="dot dot-z"></div>Z — Grade pending</div>
-    <div class="legend-item" data-grade="N"><div class="dot dot-na"></div>N — Not yet graded</div>
+  <div class="filter-bar">
+    <span class="filter-label">Grades</span>
+    <div class="filter-pill" data-grade="A"><div class="dot dot-a"></div>A — Excellent</div>
+    <div class="filter-pill" data-grade="B"><div class="dot dot-b"></div>B — Good</div>
+    <div class="filter-pill" data-grade="C"><div class="dot dot-c"></div>C — Needs improvement</div>
+    <div class="filter-pill" data-grade="P"><div class="dot dot-p"></div>P — Pending</div>
+    <div class="filter-pill" data-grade="Z"><div class="dot dot-z"></div>Z — Grade pending</div>
+    <div class="filter-pill" data-grade="N"><div class="dot dot-na"></div>N — Not graded</div>
+    <button class="filter-quick-btn" id="filter-none">None</button>
+    <button class="filter-quick-btn" id="filter-all">All</button>
   </div>
   <div id="search-wrap">
     <span id="search-icon">&#9906;</span>
@@ -530,20 +581,52 @@ for (const grade of Object.keys(GRADE_COLOR)) {
   });
 }
 
-// ── Legend toggle ──────────────────────────────────────────────────────────
-document.querySelectorAll(".legend-item").forEach((el) => {
+// ── Grade filter ───────────────────────────────────────────────────────────
+let gradeCount = {};     // populated after data loads
+let totalRestaurants = 0;
+
+function updateFilterStatus() {
+  if (!totalRestaurants) return;
+  const allGrades = Object.keys(GRADE_COLOR);
+  if (visibleGrades.size === allGrades.length) {
+    statusEl.textContent = `${totalRestaurants.toLocaleString()} restaurants`;
+  } else if (visibleGrades.size === 0) {
+    statusEl.textContent = "No grades selected";
+  } else {
+    const visible = [...visibleGrades].reduce((n, g) => n + (gradeCount[g] || 0), 0);
+    statusEl.textContent = `${visible.toLocaleString()} of ${totalRestaurants.toLocaleString()} restaurants`;
+  }
+}
+
+function setGradeVisible(grade, on) {
+  const el = document.querySelector(`.filter-pill[data-grade="${grade}"]`);
+  if (on) {
+    visibleGrades.add(grade);
+    if (!map.hasLayer(clusterGroups[grade])) map.addLayer(clusterGroups[grade]);
+    el?.classList.remove("off");
+  } else {
+    visibleGrades.delete(grade);
+    if (map.hasLayer(clusterGroups[grade])) map.removeLayer(clusterGroups[grade]);
+    el?.classList.add("off");
+  }
+}
+
+document.querySelectorAll(".filter-pill").forEach((el) => {
   el.addEventListener("click", () => {
     const grade = el.dataset.grade;
-    if (visibleGrades.has(grade)) {
-      visibleGrades.delete(grade);
-      map.removeLayer(clusterGroups[grade]);
-      el.classList.add("hidden");
-    } else {
-      visibleGrades.add(grade);
-      map.addLayer(clusterGroups[grade]);
-      el.classList.remove("hidden");
-    }
+    setGradeVisible(grade, !visibleGrades.has(grade));
+    updateFilterStatus();
   });
+});
+
+document.getElementById("filter-all").addEventListener("click", () => {
+  Object.keys(GRADE_COLOR).forEach(g => setGradeVisible(g, true));
+  updateFilterStatus();
+});
+
+document.getElementById("filter-none").addEventListener("click", () => {
+  Object.keys(GRADE_COLOR).forEach(g => setGradeVisible(g, false));
+  updateFilterStatus();
 });
 
 // ── Data loading ───────────────────────────────────────────────────────────
@@ -660,12 +743,11 @@ function buildPopup(row) {
       allMarkers.push({ row, marker, grade });
     }
 
-    const gradeCount = {};
     for (const g of Object.keys(GRADE_COLOR)) {
       gradeCount[g] = clusterGroups[g].getLayers().length;
     }
-    const total = Object.values(gradeCount).reduce((a, b) => a + b, 0);
-    setStatus(`${total.toLocaleString()} restaurants`);
+    totalRestaurants = Object.values(gradeCount).reduce((a, b) => a + b, 0);
+    updateFilterStatus();
 
     // Enable search now that allMarkers is populated
     initSearch();
