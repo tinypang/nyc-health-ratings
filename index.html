@@ -808,8 +808,7 @@ function initChangesModal(diff) {
 function round1(n) { return Math.round(n * 10) / 10; }
 
 // ── NYC polygon boundary check ─────────────────────────────────────────────
-// Borough boundaries fetched from NYC Open Data; ray-casting point-in-polygon.
-// Falls back to a loose bounding box while the fetch is in flight.
+// Borough boundaries loaded from dwillis/nyc-maps GeoJSON; ray-casting point-in-polygon.
 let nycBoroughFeatures = null;
 
 function pointInRing(lng, lat, ring) {
@@ -864,10 +863,8 @@ function isInNYC(lat, lng) {
         if (isInNYC(lat, lng)) {
           map.setView([lat, lng], 18);
         } else {
-          // Outside NYC — snap to Union Square and flash the button red briefly
+          // Outside NYC — default to Union Square
           map.setView([40.7359, -73.9911], 14);
-          btn.classList.add("error");
-          setTimeout(() => btn.classList.remove("error"), 2000);
         }
       },
       () => {
