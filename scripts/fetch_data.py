@@ -44,19 +44,49 @@ def fetch_page(offset):
         return json.loads(r.read())
 
 
-def fetch_violations():
+def fetch_latest_inspection_dates():
+    """
+    For each camis, return its most recent inspection_date across ALL
+    inspections (graded or not). Uses Socrata's GROUP BY to keep this cheap.
+
+    Why this matters: fetch_all() only returns the latest *graded* row per
+    restaurant, but a more recent ungraded re-inspection can supersede an
+    older pest citation. We must check against the true latest inspection.
+    """
+    latest = {}
+    offset = 0
+    while True:
+        params = urlencode({
+            "$limit": PAGE_SIZE,
+            "$offset": offset,
+            # 1900-01-01 sentinel rows mean "no inspection conducted" — skip
+            "$where": "inspection_date > '1901-01-01'",
+            "$select": "camis,max(inspection_date) AS latest",
+            "$group": "camis",
+            "$order": "camis",
+        })
+        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
+            page = json.loads(r.read())
+        if not page:
+            break
+        for row in page:
+            latest[row["camis"]] = row["latest"]
+        print(f"  latest-date offset {offset + len(page)}, {len(latest)} camis", flush=True)
+        if len(page) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    return latest
+
+
+def fetch_violations(latest_dates):
     """
     Fetch all rows matching pest/hygiene violation codes.
-    Returns a dict: {camis: {"date": str, "types": set}} where each entry
-    reflects only violations found on the restaurant's most recent
-    pest-violation inspection date.
-
-    Callers must compare this date against the restaurant's own
-    inspection_date before applying the flags — an old pest citation
-    should not carry forward to a later clean inspection.
+    Returns a dict: {camis: set_of_types} containing ONLY citations whose
+    inspection_date matches that camis's true most-recent inspection
+    (graded or not — see fetch_latest_inspection_dates).
     """
     codes_str = "','".join(VIOLATION_MAP.keys())
-    violations = {}   # camis -> {"latest_date": str, "types": set}
+    violations = {}
     offset = 0
     while True:
         params = urlencode({
@@ -76,20 +106,17 @@ def fetch_violations():
             vtype = VIOLATION_MAP.get(row.get("violation_code", ""))
             if not vtype:
                 continue
-            if camis not in violations:
-                violations[camis] = {"latest_date": idate, "types": set()}
-            entry = violations[camis]
-            if idate > entry["latest_date"]:
-                entry["latest_date"] = idate
-                entry["types"] = {vtype}
-            elif idate == entry["latest_date"]:
-                entry["types"].add(vtype)
+            # Skip pest rows that aren't from this restaurant's truly latest
+            # inspection — an older citation must not survive a later clean one.
+            latest = latest_dates.get(camis)
+            if not latest or idate[:10] != latest[:10]:
+                continue
+            violations.setdefault(camis, set()).add(vtype)
         print(f"  violations offset {offset + len(page)}, {len(violations)} unique", flush=True)
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
-    return {camis: {"date": data["latest_date"], "types": data["types"]}
-            for camis, data in violations.items()}
+    return violations
 
 
 def fetch_all():
@@ -213,18 +240,15 @@ def main():
     records = fetch_all()
     print(f"Total unique restaurants: {len(records)}")
 
+    print("Fetching latest inspection date per restaurant…")
+    latest_dates = fetch_latest_inspection_dates()
+    print(f"Latest dates fetched for {len(latest_dates)} restaurants")
+
     print("Fetching violation flags…")
-    violations = fetch_violations()
+    violations = fetch_violations(latest_dates)
     print(f"Violation flags fetched for {len(violations)} restaurants")
     for r in records:
-        v = violations.get(r["camis"])
-        # Only apply flags when the violation comes from the restaurant's current
-        # inspection. An old pest citation must not carry forward to a later
-        # clean inspection (date prefix comparison handles T00:00:00.000 suffix).
-        if v and v["date"][:10] == (r.get("inspection_date") or "")[:10]:
-            vtypes = v["types"]
-        else:
-            vtypes = set()
+        vtypes = violations.get(r["camis"], set())
         r["rats"]    = "rats"    in vtypes
         r["roaches"] = "roaches" in vtypes
         r["hygiene"] = "hygiene" in vtypes
