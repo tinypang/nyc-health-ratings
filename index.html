@@ -108,6 +108,40 @@
       color: #e2e8f0;
     }
 
+    /* Violation pills: dimmed by default (no filter), amber highlight when active */
+    .filter-pill[data-violation] {
+      opacity: 0.38;
+      background: transparent;
+      border-color: rgba(255,255,255,0.08);
+    }
+
+    .filter-pill[data-violation]:hover {
+      opacity: 0.65;
+      background: rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.2);
+      text-decoration: none;
+    }
+
+    .filter-pill[data-violation].viol-active {
+      opacity: 1;
+      background: rgba(251,191,36,0.12);
+      border-color: rgba(251,191,36,0.5);
+    }
+
+    .filter-pill[data-violation].viol-active:hover {
+      background: rgba(251,191,36,0.22);
+      border-color: rgba(251,191,36,0.75);
+    }
+
+    .filter-divider {
+      width: 1px;
+      height: 20px;
+      background: #334155;
+      flex-shrink: 0;
+      align-self: center;
+      margin: 0 6px;
+    }
+
     .dot {
       width: 10px;
       height: 10px;
@@ -479,6 +513,11 @@
     <div class="filter-pill" data-grade="N"><div class="dot dot-na"></div>N — Not graded</div>
     <button class="filter-quick-btn" id="filter-none">None</button>
     <button class="filter-quick-btn" id="filter-all">All</button>
+    <span class="filter-divider"></span>
+    <span class="filter-label">Violations</span>
+    <div class="filter-pill" data-violation="rats">🐀 Rats / Mice</div>
+    <div class="filter-pill" data-violation="roaches">🪳 Roaches / Flying Insects</div>
+    <div class="filter-pill" data-violation="hygiene">🤧 Inadequate Hand Washing / Preparing Food with Illness or Injury</div>
   </div>
   <div id="search-wrap">
     <span id="search-icon">&#9906;</span>
@@ -581,41 +620,94 @@ for (const grade of Object.keys(GRADE_COLOR)) {
   });
 }
 
-// ── Grade filter ───────────────────────────────────────────────────────────
-let gradeCount = {};     // populated after data loads
+// ── Grade + violation filters ──────────────────────────────────────────────
+let gradeCount = {};       // populated after data loads
 let totalRestaurants = 0;
+const activeViolations = new Set(); // violation keys currently filtering
+
+// A marker should be shown only when its grade is visible AND it passes
+// any active violation filter (OR across active types).
+function markerVisible(entry) {
+  if (!visibleGrades.has(entry.grade)) return false;
+  if (activeViolations.size === 0) return true;
+  const { row } = entry;
+  return (activeViolations.has("rats")    && row.rats)    ||
+         (activeViolations.has("roaches") && row.roaches) ||
+         (activeViolations.has("hygiene") && row.hygiene);
+}
 
 function updateFilterStatus() {
   if (!totalRestaurants) return;
   const allGrades = Object.keys(GRADE_COLOR);
-  if (visibleGrades.size === allGrades.length) {
-    statusEl.textContent = `${totalRestaurants.toLocaleString()} restaurants`;
-  } else if (visibleGrades.size === 0) {
+
+  if (visibleGrades.size === 0) {
     statusEl.textContent = "No grades selected";
-  } else {
-    const visible = [...visibleGrades].reduce((n, g) => n + (gradeCount[g] || 0), 0);
-    statusEl.textContent = `${visible.toLocaleString()} of ${totalRestaurants.toLocaleString()} restaurants`;
+    return;
   }
+  if (activeViolations.size === 0 && visibleGrades.size === allGrades.length) {
+    statusEl.textContent = `${totalRestaurants.toLocaleString()} restaurants`;
+    return;
+  }
+  // Count only markers that pass both filters
+  const visible = allMarkers.reduce((n, e) => n + (markerVisible(e) ? 1 : 0), 0);
+  statusEl.textContent = `${visible.toLocaleString()} of ${totalRestaurants.toLocaleString()} restaurants`;
+}
+
+// Re-evaluate per-marker visibility inside one grade's cluster group.
+// Used when the violation filter changes so we don't have to touch other grades.
+function syncViolationFilterForGrade(grade) {
+  const group = clusterGroups[grade];
+  const toAdd = [], toRemove = [];
+  for (const entry of allMarkers) {
+    if (entry.grade !== grade) continue;
+    const show = markerVisible(entry);
+    const has  = group.hasLayer(entry.marker);
+    if (show && !has)  toAdd.push(entry.marker);
+    if (!show && has)  toRemove.push(entry.marker);
+  }
+  if (toRemove.length) group.removeLayers(toRemove);
+  if (toAdd.length)    group.addLayers(toAdd);
 }
 
 function setGradeVisible(grade, on) {
   const el = document.querySelector(`.filter-pill[data-grade="${grade}"]`);
   if (on) {
     visibleGrades.add(grade);
-    if (!map.hasLayer(clusterGroups[grade])) map.addLayer(clusterGroups[grade]);
     el?.classList.remove("off");
+    if (!map.hasLayer(clusterGroups[grade])) map.addLayer(clusterGroups[grade]);
+    // If a violation filter is active, enforce it within this newly-visible grade
+    if (activeViolations.size > 0) syncViolationFilterForGrade(grade);
   } else {
     visibleGrades.delete(grade);
-    if (map.hasLayer(clusterGroups[grade])) map.removeLayer(clusterGroups[grade]);
     el?.classList.add("off");
+    if (map.hasLayer(clusterGroups[grade])) map.removeLayer(clusterGroups[grade]);
   }
 }
 
-document.querySelectorAll(".filter-pill").forEach((el) => {
+function setViolationActive(violation, on) {
+  const el = document.querySelector(`.filter-pill[data-violation="${violation}"]`);
+  if (on) {
+    activeViolations.add(violation);
+    el?.classList.add("viol-active");
+  } else {
+    activeViolations.delete(violation);
+    el?.classList.remove("viol-active");
+  }
+  // Sync per-marker visibility in all currently visible grade groups
+  for (const grade of visibleGrades) syncViolationFilterForGrade(grade);
+  updateFilterStatus();
+}
+
+document.querySelectorAll(".filter-pill[data-grade]").forEach((el) => {
   el.addEventListener("click", () => {
-    const grade = el.dataset.grade;
-    setGradeVisible(grade, !visibleGrades.has(grade));
+    setGradeVisible(el.dataset.grade, !visibleGrades.has(el.dataset.grade));
     updateFilterStatus();
+  });
+});
+
+document.querySelectorAll(".filter-pill[data-violation]").forEach((el) => {
+  el.addEventListener("click", () => {
+    setViolationActive(el.dataset.violation, !activeViolations.has(el.dataset.violation));
   });
 });
 

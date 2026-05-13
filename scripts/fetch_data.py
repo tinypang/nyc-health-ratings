@@ -17,6 +17,17 @@ FIELDS = "camis,dba,boro,cuisine_description,latitude,longitude,grade,grade_date
 GRADES = ["A", "B", "C", "Z", "P", "N"]
 GRADE_ORDER = {"A": 1, "B": 2, "C": 3, "Z": 4, "P": 4, "N": 5}
 
+# Violation codes to fetch and the flag they map to.
+# Only citations from each restaurant's most recent inspection are used.
+VIOLATION_MAP = {
+    "04K": "rats",     # live rats
+    "04L": "rats",     # live mice
+    "04M": "roaches",  # live roaches
+    "04N": "roaches",  # filth flies / food-associated flies
+    "04B": "hygiene",  # preparing food while ill or injured
+    "04D": "hygiene",  # inadequate handwashing
+}
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MANIFEST = os.path.join(DATA_DIR, "manifest.json")
 
@@ -31,6 +42,48 @@ def fetch_page(offset):
     })
     with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
         return json.loads(r.read())
+
+
+def fetch_violations():
+    """
+    Fetch all rows matching pest/hygiene violation codes.
+    Returns a dict: {camis: set_of_violation_types} where each set reflects
+    only the violations found on that restaurant's most recent inspection date.
+    """
+    codes_str = "','".join(VIOLATION_MAP.keys())
+    violations = {}   # camis -> {"latest_date": str, "types": set}
+    offset = 0
+    while True:
+        params = urlencode({
+            "$limit": PAGE_SIZE,
+            "$offset": offset,
+            "$where": f"violation_code IN ('{codes_str}')",
+            "$select": "camis,inspection_date,violation_code",
+            "$order": "camis,inspection_date DESC",
+        })
+        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
+            page = json.loads(r.read())
+        if not page:
+            break
+        for row in page:
+            camis = row["camis"]
+            idate = row.get("inspection_date", "")
+            vtype = VIOLATION_MAP.get(row.get("violation_code", ""))
+            if not vtype:
+                continue
+            if camis not in violations:
+                violations[camis] = {"latest_date": idate, "types": set()}
+            entry = violations[camis]
+            if idate > entry["latest_date"]:
+                entry["latest_date"] = idate
+                entry["types"] = {vtype}
+            elif idate == entry["latest_date"]:
+                entry["types"].add(vtype)
+        print(f"  violations offset {offset + len(page)}, {len(violations)} unique", flush=True)
+        if len(page) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    return {camis: data["types"] for camis, data in violations.items()}
 
 
 def fetch_all():
@@ -153,6 +206,15 @@ def main():
 
     records = fetch_all()
     print(f"Total unique restaurants: {len(records)}")
+
+    print("Fetching violation flags…")
+    violations = fetch_violations()
+    print(f"Violation flags fetched for {len(violations)} restaurants")
+    for r in records:
+        vtypes = violations.get(r["camis"], set())
+        r["rats"]    = "rats"    in vtypes
+        r["roaches"] = "roaches" in vtypes
+        r["hygiene"] = "hygiene" in vtypes
 
     out_path = os.path.join(DATA_DIR, f"{today}.json")
     with open(out_path, "w") as f:
