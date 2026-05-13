@@ -835,6 +835,10 @@ function isInNYC(lat, lng) {
   return nycBoroughFeatures.some(f => pointInFeature(lng, lat, f));
 }
 
+// Holds a geolocation position that arrived before the GeoJSON finished loading.
+// Resolved by loadNYCBoroughBounds once features are ready.
+let pendingAutoLocate = null;
+
 (async function loadNYCBoroughBounds() {
   try {
     const res = await fetch(
@@ -843,8 +847,14 @@ function isInNYC(lat, lng) {
     if (!res.ok) throw new Error();
     const gj = await res.json();
     nycBoroughFeatures = gj.features;
+    // If auto-locate fired before we finished loading, apply it now.
+    if (pendingAutoLocate) {
+      const { lat, lng } = pendingAutoLocate;
+      pendingAutoLocate = null;
+      if (isInNYC(lat, lng)) map.setView([lat, lng], 18);
+    }
   } catch (_) {
-    // Silently keep using bounding box fallback
+    pendingAutoLocate = null; // GeoJSON failed — stay on Union Square
   }
 })();
 
@@ -882,10 +892,13 @@ if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const { latitude: lat, longitude: lng } = pos.coords;
-      if (isInNYC(lat, lng)) {
-        map.setView([lat, lng], 18);
+      if (nycBoroughFeatures) {
+        // GeoJSON already loaded — apply immediately.
+        if (isInNYC(lat, lng)) map.setView([lat, lng], 18);
+      } else {
+        // GeoJSON still loading — park the position; loadNYCBoroughBounds will pick it up.
+        pendingAutoLocate = { lat, lng };
       }
-      // Outside NYC — stay on Union Square default, no action needed
     },
     () => {}, // silently ignore denial/error
     { timeout: 5000, maximumAge: 60000 }
