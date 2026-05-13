@@ -806,7 +806,6 @@ function round1(n) { return Math.round(n * 10) / 10; }
 // Borough boundaries fetched from NYC Open Data; ray-casting point-in-polygon.
 // Falls back to a loose bounding box while the fetch is in flight.
 let nycBoroughFeatures = null;
-const NYC_BBOX = { minLat: 40.477, maxLat: 40.917, minLng: -74.260, maxLng: -73.700 };
 
 function pointInRing(lng, lat, ring) {
   // GeoJSON rings: [[lng, lat], ...]. Classic ray-casting algorithm.
@@ -826,11 +825,10 @@ function pointInFeature(lng, lat, feature) {
 }
 
 function isInNYC(lat, lng) {
-  if (nycBoroughFeatures)
-    return nycBoroughFeatures.some(f => pointInFeature(lng, lat, f));
-  // Bounding-box fallback while GeoJSON is loading
-  return lat >= NYC_BBOX.minLat && lat <= NYC_BBOX.maxLat &&
-         lng >= NYC_BBOX.minLng && lng <= NYC_BBOX.maxLng;
+  // If polygons haven't loaded yet or failed, return false so the map
+  // stays on Union Square rather than using an inaccurate fallback.
+  if (!nycBoroughFeatures) return false;
+  return nycBoroughFeatures.some(f => pointInFeature(lng, lat, f));
 }
 
 (async function loadNYCBoroughBounds() {
