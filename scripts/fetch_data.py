@@ -17,6 +17,17 @@ FIELDS = "camis,dba,boro,cuisine_description,latitude,longitude,grade,grade_date
 GRADES = ["A", "B", "C", "Z", "P", "N"]
 GRADE_ORDER = {"A": 1, "B": 2, "C": 3, "Z": 4, "P": 4, "N": 5}
 
+# Violation codes to fetch and the flag they map to.
+# Only citations from each restaurant's most recent inspection are used.
+VIOLATION_MAP = {
+    "04K": "rats",     # live rats
+    "04L": "rats",     # live mice
+    "04M": "roaches",  # live roaches
+    "04N": "roaches",  # filth flies / food-associated flies
+    "04B": "hygiene",  # preparing food while ill or injured
+    "04D": "hygiene",  # inadequate handwashing
+}
+
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MANIFEST = os.path.join(DATA_DIR, "manifest.json")
 
@@ -31,6 +42,81 @@ def fetch_page(offset):
     })
     with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
         return json.loads(r.read())
+
+
+def fetch_latest_inspection_dates():
+    """
+    For each camis, return its most recent inspection_date across ALL
+    inspections (graded or not). Uses Socrata's GROUP BY to keep this cheap.
+
+    Why this matters: fetch_all() only returns the latest *graded* row per
+    restaurant, but a more recent ungraded re-inspection can supersede an
+    older pest citation. We must check against the true latest inspection.
+    """
+    latest = {}
+    offset = 0
+    while True:
+        params = urlencode({
+            "$limit": PAGE_SIZE,
+            "$offset": offset,
+            # 1900-01-01 sentinel rows mean "no inspection conducted" — skip
+            "$where": "inspection_date > '1901-01-01'",
+            "$select": "camis,max(inspection_date) AS latest",
+            "$group": "camis",
+            "$order": "camis",
+        })
+        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
+            page = json.loads(r.read())
+        if not page:
+            break
+        for row in page:
+            latest[row["camis"]] = row["latest"]
+        print(f"  latest-date offset {offset + len(page)}, {len(latest)} camis", flush=True)
+        if len(page) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    return latest
+
+
+def fetch_violations(latest_dates):
+    """
+    Fetch all rows matching pest/hygiene violation codes.
+    Returns a dict: {camis: set_of_types} containing ONLY citations whose
+    inspection_date matches that camis's true most-recent inspection
+    (graded or not — see fetch_latest_inspection_dates).
+    """
+    codes_str = "','".join(VIOLATION_MAP.keys())
+    violations = {}
+    offset = 0
+    while True:
+        params = urlencode({
+            "$limit": PAGE_SIZE,
+            "$offset": offset,
+            "$where": f"violation_code IN ('{codes_str}')",
+            "$select": "camis,inspection_date,violation_code",
+            "$order": "camis,inspection_date DESC",
+        })
+        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
+            page = json.loads(r.read())
+        if not page:
+            break
+        for row in page:
+            camis = row["camis"]
+            idate = row.get("inspection_date", "")
+            vtype = VIOLATION_MAP.get(row.get("violation_code", ""))
+            if not vtype:
+                continue
+            # Skip pest rows that aren't from this restaurant's truly latest
+            # inspection — an older citation must not survive a later clean one.
+            latest = latest_dates.get(camis)
+            if not latest or idate[:10] != latest[:10]:
+                continue
+            violations.setdefault(camis, set()).add(vtype)
+        print(f"  violations offset {offset + len(page)}, {len(violations)} unique", flush=True)
+        if len(page) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    return violations
 
 
 def fetch_all():
@@ -153,6 +239,19 @@ def main():
 
     records = fetch_all()
     print(f"Total unique restaurants: {len(records)}")
+
+    print("Fetching latest inspection date per restaurant…")
+    latest_dates = fetch_latest_inspection_dates()
+    print(f"Latest dates fetched for {len(latest_dates)} restaurants")
+
+    print("Fetching violation flags…")
+    violations = fetch_violations(latest_dates)
+    print(f"Violation flags fetched for {len(violations)} restaurants")
+    for r in records:
+        vtypes = violations.get(r["camis"], set())
+        r["rats"]    = "rats"    in vtypes
+        r["roaches"] = "roaches" in vtypes
+        r["hygiene"] = "hygiene" in vtypes
 
     out_path = os.path.join(DATA_DIR, f"{today}.json")
     with open(out_path, "w") as f:
