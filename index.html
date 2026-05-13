@@ -856,7 +856,7 @@ let pendingAutoLocate = null;
     if (pendingAutoLocate) {
       const { lat, lng } = pendingAutoLocate;
       pendingAutoLocate = null;
-      if (isInNYC(lat, lng)) map.setView([lat, lng], 18);
+      if (isInNYC(lat, lng)) map.setView([lat, lng], 18, { animate: false });
     }
   } catch (_) {
     pendingAutoLocate = null; // GeoJSON failed — stay on Union Square
@@ -876,10 +876,10 @@ let pendingAutoLocate = null;
         btn.classList.remove("locating");
         const { latitude: lat, longitude: lng } = pos.coords;
         if (isInNYC(lat, lng)) {
-          map.setView([lat, lng], 18);
+          map.setView([lat, lng], 18, { animate: false });
         } else {
           // Outside NYC — default to Union Square
-          map.setView([40.7359, -73.9911], 14);
+          map.setView([40.7359, -73.9911], 14, { animate: false });
         }
       },
       () => {
@@ -899,7 +899,7 @@ if (navigator.geolocation) {
       const { latitude: lat, longitude: lng } = pos.coords;
       if (nycBoroughFeatures) {
         // GeoJSON already loaded — apply immediately.
-        if (isInNYC(lat, lng)) map.setView([lat, lng], 18);
+        if (isInNYC(lat, lng)) map.setView([lat, lng], 18, { animate: false });
       } else {
         // GeoJSON still loading — park the position; loadNYCBoroughBounds will pick it up.
         pendingAutoLocate = { lat, lng };
