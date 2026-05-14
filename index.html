@@ -186,6 +186,24 @@
       border-color: rgba(251,191,36,0.7);
     }
 
+    /* The "no violations" pill uses green to read as a positive filter,
+       distinct from the amber pest/hygiene pills it sits below. */
+    .filter-pill[data-violation="clean"].viol-active {
+      background: rgba(34,197,94,0.12);
+      border-color: rgba(34,197,94,0.5);
+    }
+
+    .filter-pill[data-violation="clean"].viol-active:hover {
+      background: rgba(34,197,94,0.22);
+      border-color: rgba(34,197,94,0.75);
+    }
+
+    .filter-dropdown .dropdown-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+      margin: 6px 4px;
+    }
+
     .filter-quick-btn {
       background: none;
       border: 1px solid #334155;
@@ -619,10 +637,12 @@
       <span class="chevron">▾</span>
     </button>
     <div class="filter-dropdown" id="violations-dropdown">
-      <div class="dropdown-label">Filter to restaurants with violation on latest inspection</div>
+      <div class="dropdown-label">Filter by violation status on latest inspection</div>
       <div class="filter-pill" data-violation="rats">🐀 Rats / Mice</div>
       <div class="filter-pill" data-violation="roaches">🪳 Roaches / Flying Insects</div>
       <div class="filter-pill" data-violation="hygiene">🤧 Inadequate Hand Washing / Preparing Food with Illness or Injury</div>
+      <div class="dropdown-divider"></div>
+      <div class="filter-pill" data-violation="clean">✅ No rats, roaches, or hand-washing violations</div>
     </div>
   </div>
   <div id="search-wrap">
@@ -731,10 +751,17 @@ let gradeCount = {};
 let totalRestaurants = 0;
 const activeViolations = new Set();
 
+const PEST_VIOLATIONS = ["rats", "roaches", "hygiene"];
+
 function markerVisible(entry) {
   if (!visibleGrades.has(entry.grade)) return false;
   if (activeViolations.size === 0) return true;
   const { row } = entry;
+  // "clean" is mutually exclusive with the three pest filters (see
+  // setViolationActive), so we never need to combine these two branches.
+  if (activeViolations.has("clean")) {
+    return !row.rats && !row.roaches && !row.hygiene;
+  }
   return (activeViolations.has("rats")    && row.rats)    ||
          (activeViolations.has("roaches") && row.roaches) ||
          (activeViolations.has("hygiene") && row.hygiene);
@@ -812,8 +839,26 @@ function setGradeVisible(grade, on) {
 
 function setViolationActive(violation, on) {
   const el = document.querySelector(`.filter-pill[data-violation="${violation}"]`);
-  if (on) { activeViolations.add(violation);    el?.classList.add("viol-active");    }
-  else    { activeViolations.delete(violation); el?.classList.remove("viol-active"); }
+  if (on) {
+    // Enforce mutual exclusion: "clean" and the three pest filters can never
+    // be active at the same time (their semantics are inverses).
+    if (violation === "clean") {
+      for (const v of PEST_VIOLATIONS) {
+        if (activeViolations.delete(v)) {
+          document.querySelector(`.filter-pill[data-violation="${v}"]`)
+            ?.classList.remove("viol-active");
+        }
+      }
+    } else if (activeViolations.delete("clean")) {
+      document.querySelector('.filter-pill[data-violation="clean"]')
+        ?.classList.remove("viol-active");
+    }
+    activeViolations.add(violation);
+    el?.classList.add("viol-active");
+  } else {
+    activeViolations.delete(violation);
+    el?.classList.remove("viol-active");
+  }
   updateViolationsBadge();
 }
 
