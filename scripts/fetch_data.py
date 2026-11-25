@@ -6,7 +6,9 @@ and prunes files older than KEEP_WEEKS weeks.
 """
 import json
 import os
+import time
 from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from urllib.parse import urlencode
 
@@ -31,6 +33,33 @@ VIOLATION_MAP = {
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MANIFEST = os.path.join(DATA_DIR, "manifest.json")
 
+RETRY_DELAYS = (10, 30, 60, 120)  # seconds between attempts
+
+
+def get_json(url, delays=RETRY_DELAYS, sleep=time.sleep):
+    """
+    GET a Socrata URL and parse JSON, retrying transient failures.
+
+    NYC Open Data intermittently returns 5xx (e.g. 503 Service Unavailable)
+    or drops connections; a single blip used to fail the whole weekly run.
+    Retries 5xx, 429 and network errors with backoff; other 4xx errors are
+    real request bugs and are raised immediately.
+    """
+    for attempt, delay in enumerate((*delays, None), start=1):
+        try:
+            with urlopen(url, timeout=60) as r:
+                return json.loads(r.read())
+        except HTTPError as e:
+            if (e.code < 500 and e.code != 429) or delay is None:
+                raise
+            reason = f"HTTP {e.code}"
+        except (URLError, TimeoutError, ConnectionError) as e:
+            if delay is None:
+                raise
+            reason = type(e).__name__
+        print(f"  attempt {attempt} failed ({reason}); retrying in {delay}s", flush=True)
+        sleep(delay)
+
 
 def fetch_page(offset):
     params = urlencode({
@@ -45,8 +74,7 @@ def fetch_page(offset):
         # in the weekly diff.
         "$order": "inspection_date DESC, camis",
     })
-    with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
-        return json.loads(r.read())
+    return get_json(f"{API_BASE}?{params}")
 
 
 def fetch_latest_inspection_dates():
@@ -70,8 +98,7 @@ def fetch_latest_inspection_dates():
             "$group": "camis",
             "$order": "camis",
         })
-        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
-            page = json.loads(r.read())
+        page = get_json(f"{API_BASE}?{params}")
         if not page:
             break
         for row in page:
@@ -104,8 +131,7 @@ def fetch_violations(latest_dates):
             # final tiebreaker since multiple codes can share (camis,date).
             "$order": "camis,inspection_date DESC,violation_code",
         })
-        with urlopen(f"{API_BASE}?{params}", timeout=60) as r:
-            page = json.loads(r.read())
+        page = get_json(f"{API_BASE}?{params}")
         if not page:
             break
         for row in page:
